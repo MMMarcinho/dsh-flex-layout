@@ -1,7 +1,10 @@
 {
   "name": "dsh-flex-layout",
   "version": "0.1.0",
-  "private": true,
+  "repository": { "type": "git", "url": "git+https://github.com/MMMarcinho/dsh-flex-layout.git" },
+  "homepage": "https://github.com/MMMarcinho/dsh-flex-layout#readme",
+  "bugs": { "url": "https://github.com/MMMarcinho/dsh-flex-layout/issues" },
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
   "description": "Responsive layout for DeepSeek Harness: flexible columns, drawers, dialogs and visual viewport handling",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,6 +16,7 @@
     "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-ui-layout", "@deepseek-ai/dsh-client-ui-conversation"] }
   },
   "scripts": {
+    "prepack": "npm run build",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node tests/browser.mjs",

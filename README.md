@@ -11,6 +11,16 @@ DeepSeek Harness 的弹性布局插件。第一版以本机 DSH **0.2.1-rc.3** �
 - 用 Visual Viewport 跟随软键盘造成的可见高度变化，保留用户双指缩放，避让底部安全区。
 - 宽屏保留宿主栏宽与拖动行为；识别到新宿主原生抽屉时，由宿主继续管理。
 
+## npm 安装
+
+可直接安装到 Web profile：
+
+```sh
+dsh plugin --profile web add dsh-flex-layout@0.1.0
+```
+
+安装完成后重启对应的 DSH profile。npm 包包含构建后的 `dist/`，无需下载源码或手动构建。
+
 ## 本地开发和安装
 
 ```sh
