@@ -1,0 +1,23 @@
+{
+  "name": "dsh-flex-layout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Responsive layout for DeepSeek Harness: flexible columns, drawers, dialogs and visual viewport handling",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": { ".": "./dist/index.js", "./client": "./dist/client.js", "./package.json": "./package.json" },
+  "files": ["dist", "cordis.patch.yml", "README.md"],
+  "engines": { "node": ">=22.19.0" },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-ui-layout", "@deepseek-ai/dsh-client-ui-conversation"] }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node tests/browser.mjs",
+    "test:host": "npm run build && node tests/host.mjs",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": { "esbuild": "^0.25.0", "typescript": "^5.9.0", "@playwright/test": "^1.56.0" }
+}

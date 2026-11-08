@@ -1,0 +1,50 @@
+/* All overrides are gated by our own markers. Host theme tokens stay intact. */
+html[data-dfl-active] [data-dfl="frame"] { min-width: 0; min-height: 0; }
+html[data-dfl-active] :is([data-dfl="center"], [data-dfl="conversation-root"], [data-dfl="conversation-body"], [data-dfl="conversation-composerStack"]) { min-width: 0; min-height: 0; }
+html[data-dfl-active] [data-dfl="scroll"] { min-width: 0; overscroll-behavior: contain; }
+html[data-dfl-active] [data-dfl="scroll"] :is(pre, table) { max-width: 100%; overflow-x: auto; }
+html[data-dfl-active] [data-dfl="scroll"] img { max-width: 100%; height: auto; }
+html[data-dfl-active] :is([data-dfl="input-root"], [data-dfl="input-card"]) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+html[data-dfl-active] :is([data-dfl="input-row"], [data-dfl="input-standardControls"], [data-dfl="input-modes"], [data-dfl="input-tools"]) { min-width: 0; flex-wrap: wrap; gap: 6px; }
+html[data-dfl-active] [data-dfl="input-input"] { min-width: 0; overflow-wrap: anywhere; }
+html[data-dfl-active] [data-dfl="dialog"] { box-sizing: border-box; min-width: 0; max-width: calc(100vw - 24px); max-height: calc(var(--dfl-height, 100dvh) - 32px); overflow: auto; }
+[data-dfl-toggle], [data-dfl-backdrop] { display: none; }
+html[data-dfl-size="compact"] [data-dfl="frame"] {
+  height: var(--dfl-height, 100dvh); max-height: var(--dfl-height, 100dvh);
+  top: var(--dfl-top, 0px); box-sizing: border-box;
+}
+/* Legacy adapter: explicit columns work both before and after grid-column was
+   added upstream. New native drawers are intentionally left with their owner. */
+[data-dfl="frame"][data-dfl-size="compact"][data-dfl-legacy="true"] { grid-template-columns: 0 minmax(0, 1fr) 0 !important; }
+[data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="center"] { grid-column: 2; grid-row: 1; }
+[data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="rightbar"] { grid-column: 3; grid-row: 1; }
+[data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="sidebar"] {
+  position: absolute; inset: 0 auto 0 0; width: min(320px, calc(100% - 56px));
+  max-width: calc(100% - 56px); z-index: 81;
+  background: var(--dsw-specific-sidebar-fill, #f5f5f5);
+  visibility: hidden; transform: translateX(-100%); pointer-events: none;
+}
+[data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl="sidebar"] { visibility: visible; transform: none; pointer-events: auto; }
+[data-dfl-size="compact"][data-dfl-legacy="true"] > [data-side] { display: none; }
+/* The native sidebar's inner width may retain the collapsed 56px geometry. */
+[data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl="sidebar"] > * { width: 100% !important; max-width: 100%; }
+[data-dfl-toggle]:not([hidden]) {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: absolute; left: max(8px, env(safe-area-inset-left));
+  top: calc(var(--dsh-frame-top-clearance, 0px) + 8px); z-index: 82;
+  width: 44px; height: 44px; border: 1px solid var(--dsw-alias-border-l3, #ccc);
+  border-radius: 12px; color: var(--dsw-alias-label-primary, #222);
+  background: var(--dsw-alias-bg-base, white); cursor: pointer; font-size: 20px;
+}
+[data-dfl-backdrop]:not([hidden]) { display: block; position: absolute; inset: 0; z-index: 80; background: #0006; border: 0; width: 100%; height: 100%; }
+[data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl-toggle] { left: auto; right: max(8px, env(safe-area-inset-right)); }
+html[data-dfl-size="compact"] [data-dfl-legacy="true"] [data-dfl="conversation-headerLeading"] { padding-left: 56px; }
+html[data-dfl-size="compact"] [data-dfl="conversation-titleRow"] { min-width: 0; flex-wrap: wrap; }
+html[data-dfl-size="compact"] [data-dfl="conversation-tabs"] { min-width: 0; overflow-x: auto; }
+html[data-dfl-size="compact"] [data-dfl="conversation-composerSeat"] { box-sizing: border-box; min-width: 0; padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+html[data-dfl-size="compact"] [data-dfl="input-scroll"] { max-height: min(32dvh, 180px); overflow-y: auto; }
+html[data-dfl-size="compact"] [data-dfl="input-input"] { font-size: max(16px, 1em); }
+html[data-dfl-size="compact"] [data-dfl="dialog"] { width: calc(100vw - 24px) !important; }
+@media (pointer: coarse) {
+  html[data-dfl-size="compact"] :is([data-dfl="input-root"], [data-dfl="dialog"]) button { min-height: 44px; min-width: 44px; }
+}
