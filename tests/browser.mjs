@@ -11,7 +11,8 @@ page.on('pageerror', error => errors.push(error.message));
 const settle = () => page.waitForTimeout(100);
 const icon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v16H3zM9 4v16"/></svg>';
 function composer(id) {
-  return `<div class="conv_composerSeat" data-composer-seat><div class="input_root" data-editor-id="${id}"><div class="input_card"><div class="input_grow"><div class="input_scroll"><div class="input_input" role="textbox" contenteditable="true" aria-label="Draft ${id}"></div></div></div><div class="input_row"><div class="input_standardControls"><div class="input_modes"><button>模式</button><button>权限</button><button>模型</button></div><div class="input_trailing"><button>发送</button></div></div></div></div><div data-composer-dock><span data-composer-stat><button class="stats_pill"><span class="stats_label">当前工作目录 /Users/example/projects/a-very-long-project-name-without-natural-breaks</span></button></span><span data-composer-stat><button class="stats_pill"><span class="stats_label">上下文使用情况 123,456 / 200,000 tokens</span></button></span></div></div></div>`;
+  const stats = [['activity', '10 轮 405 步 · 总耗时 2 小时 16 分钟'], ['usage', '1.21M tok · 缓存命中 98.76% · 输入 987654 输出 223456'], ['context', '45%']];
+  return `<div class="conv_composerSeat" data-composer-seat><div class="input_root" data-editor-id="${id}"><div class="input_card"><div class="input_grow"><div class="input_scroll"><div class="input_input" role="textbox" contenteditable="true" aria-label="Draft ${id}"></div></div></div><div class="input_row"><div class="input_standardControls"><div class="input_modes"><button>模式</button><button>权限</button><button>模型</button></div><div class="input_trailing"><button>发送</button></div></div></div></div><div data-composer-dock>${stats.map(([kind, label]) => `<span ${kind === 'context' ? '' : `data-composer-stat="${kind}"`}><button class="${kind === 'context' ? 'context_pill' : 'stats_pill'}" aria-label="${kind} details ${id}" aria-haspopup="dialog"><span class="${kind === 'context' ? 'context_label' : 'stats_label'}">${label}</span></button></span>`).join('')}</div></div></div>`;
 }
 function conversation(id) {
   return `<div class="conv_root"><header class="conv_header"><div class="conv_headerLeading">标题 ${id}</div></header><div class="conv_body" data-conversation-content><div class="conv_scrollBody" data-conversation-scroll><p>长会话</p><pre>very long code</pre></div>${composer(id)}</div></div>`;
@@ -38,6 +39,13 @@ async function mount(options) {
     window.toggles = 0;
     window.toggleSidebar = () => { document.querySelector('.host_frame').toggleAttribute('data-sidebar-collapsed'); window.toggles++; };
     document.querySelector('.sidebar_toggle')?.addEventListener('click', window.toggleSidebar);
+    window.nativeStatClicks = {};
+    window.nativeStats = [...document.querySelectorAll('[data-composer-dock] button')];
+    window.nativeDockMarkup = document.querySelector('[data-composer-dock]').innerHTML;
+    for (const button of window.nativeStats) button.addEventListener('click', () => {
+      const name = button.getAttribute('aria-label');
+      window.nativeStatClicks[name] = (window.nativeStatClicks[name] || 0) + 1;
+    });
   });
   await page.addScriptTag({ content: bundle });
   await page.evaluate(() => { window.stopPlugin = window.plugin.install(document, { toggleSidebar: window.toggleSidebar }); });
@@ -49,6 +57,7 @@ async function clean() {
   assert.equal(await page.locator('[inert]').count(), 0, 'inert restored');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('*')].some(el => [...el.style].some(key => key.startsWith('--dfl-')))), false, 'all measured CSS variables removed');
   assert.equal(await page.locator('#dfl-sidebar').count(), 0, 'generated ID removed');
+  assert.equal(await page.locator('[id^="dfl-stats-"]').count(), 0, 'generated stats IDs removed');
 }
 async function checkComposer(width) {
   const metrics = await page.locator('[data-editor-id="primary"]').evaluate(root => {
@@ -61,10 +70,42 @@ async function checkComposer(width) {
   assert.ok(metrics.scrollHeight > metrics.height && metrics.height >= 36, 'long draft has bounded scroll region');
   assert.equal(metrics.overflow, 'auto');
   assert.equal(metrics.wrap, 'nowrap', 'host controls keep native compact layout');
-  if (width <= 430) assert.ok(metrics.labels.some(label => label.height > label.lineHeight * 1.5), 'long footer labels wrap on phones');
-  assert.ok(metrics.labels.every(label => label.overflow === 'visible' && label.ellipsis === 'clip'), 'footer labels are not ellipsized');
+  await checkStats('primary', false);
   await page.locator('[data-editor-id="primary"] .input_scroll').evaluate(el => { el.scrollTop = el.scrollHeight; });
   assert.ok(await page.locator('[data-editor-id="primary"] .input_scroll').evaluate(el => el.scrollTop > 0), 'last draft lines reachable');
+}
+async function checkStats(id, expanded) {
+  const root = page.locator(`[data-editor-id="${id}"]`);
+  const toggle = root.locator('button[data-dfl-stats-toggle]');
+  assert.equal(await toggle.count(), 1, `one stats toggle for ${id}`);
+  assert.equal(await toggle.getAttribute('aria-expanded'), String(expanded));
+  assert.equal(await toggle.getAttribute('type'), 'button', 'stats toggle never submits a draft');
+  assert.equal(await toggle.getAttribute('aria-controls'), await root.locator('[data-composer-dock]').getAttribute('id'), 'disclosure controls its own native dock');
+  assert.ok(await toggle.getAttribute('aria-label') || await toggle.innerText(), 'stats toggle has an accessible name');
+  const geometry = await root.evaluate(root => {
+    const dock = root.querySelector('[data-composer-dock]');
+    return {height: dock.getBoundingClientRect().height, buttons: [...root.querySelectorAll('button[aria-haspopup="dialog"]')].map(button => ({same: window.nativeStats.includes(button), top: button.getBoundingClientRect().top, height: button.getBoundingClientRect().height, ellipsis: getComputedStyle(button.querySelector('span')).textOverflow, kind: button.getAttribute('aria-label').split(' ')[0]}))};
+  });
+  assert.equal(geometry.buttons.length, 3, 'all three native statistics controls remain mounted');
+  assert.ok(geometry.buttons.every(button => button.same), 'original statistics buttons and their listeners survive');
+  if (!expanded) assert.ok(geometry.height <= 36, `collapsed stats take one compact row: ${JSON.stringify(geometry)}`);
+  else {
+    assert.ok(geometry.buttons.every(button => button.ellipsis !== 'ellipsis'), 'expanded statistics retain full labels');
+    const activity = geometry.buttons.find(button => button.kind === 'activity');
+    const usage = geometry.buttons.find(button => button.kind === 'usage');
+    const context = geometry.buttons.find(button => button.kind === 'context');
+    assert.ok(usage.top >= activity.top + activity.height - 1, 'expanded activity and usage occupy two rows');
+    assert.ok(Math.abs(usage.top + usage.height / 2 - context.top - context.height / 2) <= 1, 'usage and context share the second row');
+    const endpoints = await root.locator('[data-dfl="stat-pill"]').evaluateAll(buttons => buttons.map(button => {
+      const label = button.querySelector('[data-dfl="stat-label"]'), node = label.firstChild;
+      const glyph = last => { const range = document.createRange(); range.setStart(node, last ? node.length - 1 : 0); range.setEnd(node, last ? node.length : 1); return range.getBoundingClientRect().toJSON(); };
+      button.scrollLeft = 0; const first = glyph(false), box = button.getBoundingClientRect().toJSON();
+      button.scrollLeft = button.scrollWidth; const last = glyph(true), scrolled = button.scrollLeft; button.scrollLeft = 0;
+      return {first, last, box, scrolled, overflow: getComputedStyle(button).overflowX};
+    }));
+    assert.ok(endpoints.every(item => item.first.left >= item.box.left - 1 && item.last.right <= item.box.right + 1), `full statistics remain reachable within each native pill: ${JSON.stringify(endpoints)}`);
+  }
+  return geometry;
 }
 try {
   const draft = Array.from({ length: 28 }, (_, i) => `第 ${i + 1} 行 ${'longword'.repeat(12)}`).join('\n');
@@ -91,6 +132,42 @@ try {
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'session selection closes drawer');
     await page.locator('[data-sidebar-right-panel]').evaluate(el => { el.style.display = 'block'; });
     assert.ok((await page.locator('[data-sidebar-right-panel]').boundingBox()).width <= width - 16, 'right panel bounded');
+    await clean();
+  }
+  // A native disclosure keeps the default footer compact and preserves the
+  // host's three original detail actions, including keyboard activation.
+  await page.setViewportSize({width: 390, height: 844}); await mount();
+  await page.getByRole('textbox', {name: 'Draft primary'}).fill(draft);
+  const statsToggle = page.locator('[data-editor-id="primary"] [data-dfl-stats-toggle]');
+  const collapsedStats = await checkStats('primary', false);
+  await statsToggle.focus(); await page.keyboard.press('Enter'); await settle();
+  const expandedStats = await checkStats('primary', true);
+  assert.ok(expandedStats.height > collapsedStats.height, 'details expand only on request');
+  for (const kind of ['activity', 'usage', 'context']) {
+    await page.getByRole('button', {name: `${kind} details primary`, exact: true}).click();
+    assert.equal(await page.evaluate(name => window.nativeStatClicks[name], `${kind} details primary`), 1, `native ${kind} listener retained`);
+  }
+  await page.setViewportSize({width: 844, height: 390}); await settle(); await checkStats('primary', true);
+  await page.setViewportSize({width: 390, height: 844}); await settle(); await checkStats('primary', true);
+  assert.equal(await page.getByRole('textbox', {name: 'Draft primary'}).innerText(), draft, 'stats and rotation preserve draft');
+  await statsToggle.focus(); await page.keyboard.press('Space'); await settle(); await checkStats('primary', false);
+  for (let index = 0; index < 4; index++) { await statsToggle.click(); await settle(); await checkStats('primary', index % 2 === 0); }
+  await clean();
+
+  // Medium viewports still reserve the native 56px rail. The composer needs
+  // its own inner gutter rather than relying on the phone-only frame rules.
+  for (const [width, height] of [[768,1024],[820,1180],[900,1200]]) {
+    await page.setViewportSize({width,height}); await mount();
+    const boxes = await page.evaluate(() => ({center: document.querySelector('[data-dfl="center"]').getBoundingClientRect().toJSON(), card: document.querySelector('[data-dfl="input-card"]').getBoundingClientRect().toJSON()}));
+    assert.equal(boxes.center.x, 56, 'collapsed native rail remains visible');
+    assert.ok(boxes.card.x - boxes.center.x >= 8, `${width}px left composer gutter: ${JSON.stringify(boxes)}`);
+    assert.ok(boxes.center.right - boxes.card.right >= 8, `${width}px right composer gutter: ${JSON.stringify(boxes)}`);
+    await checkStats('primary', false); await clean();
+  }
+  for (const [width,height] of [[150,180],[162,197],[184,224],[200,240],[240,320]]) {
+    await page.setViewportSize({width,height}); await mount(); await checkStats('primary', false);
+    await page.locator('[data-dfl-stats-toggle]').click(); await settle(); await checkStats('primary', true);
+    assert.ok(await page.locator('body').evaluate(el => el.scrollWidth <= innerWidth + 1), `${width}px footer does not widen the page`);
     await clean();
   }
   await page.setViewportSize({ width: 390, height: 844 }); await mount({ nativeClose: false });
@@ -125,6 +202,27 @@ try {
 
   await page.setViewportSize({ width: 390, height: 844 }); await mount({ multiple: true });
   for (const role of ['conversation-root', 'input-root', 'input-scroll', 'input-input']) assert.equal(await page.locator(`[data-dfl="${role}"]`).count(), 2, `both embedded ${role} regions adapted`);
+  await checkStats('primary', false); await checkStats('embedded', false);
+  await page.locator('[data-editor-id="primary"] [data-dfl-stats-toggle]').click(); await settle();
+  await checkStats('primary', true); await checkStats('embedded', false);
+  await page.locator('[data-editor-id="embedded"] [data-dfl-stats-toggle]').click(); await settle();
+  await checkStats('primary', true); await checkStats('embedded', true);
+  await page.locator('[data-editor-id="primary"] [data-dfl-stats-toggle]').click(); await settle();
+  await checkStats('primary', false); await checkStats('embedded', true);
+  await clean();
+  // A host can clear and later rebuild a footer without replacing the input.
+  await mount();
+  await page.evaluate(() => {
+    document.querySelector('[data-composer-dock]').replaceChildren();
+  }); await settle();
+  assert.equal(await page.locator('[data-dfl-stats-toggle]').count(), 0, 'empty dock removes its disclosure');
+  assert.equal(await page.locator('[data-composer-dock]').getAttribute('data-dfl-stats-expanded'), null, 'empty dock releases its layout state');
+  await page.evaluate(() => {
+    const dock = document.querySelector('[data-composer-dock]');
+    dock.innerHTML = window.nativeDockMarkup;
+  }); await settle();
+  assert.equal(await page.locator('[data-dfl-stats-toggle]').count(), 1, 'rebuilt native statistics get exactly one disclosure');
+  assert.equal(await page.locator('[data-dfl-stats-toggle]').getAttribute('aria-expanded'), 'false');
   await clean();
   await mount();
   await page.locator('[data-dfl-toggle]').click(); await settle();
@@ -164,7 +262,51 @@ try {
   assert.equal(await page.locator('[data-dfl="frame"]').getAttribute('data-dfl-legacy'), 'false', 'native capability persists across breakpoint changes');
   assert.equal(await page.locator('[data-dfl-toggle]').count(), 0);
   await clean();
+  // Container adaptation must not turn a wide frame into a global drawer.
+  // Each embedded conversation keeps its own density and cleanup ownership.
+  await page.setViewportSize({ width: 1280, height: 900 }); await mount({ multiple: true });
+  await page.locator('.conv_root').evaluateAll(nodes => nodes.forEach((node,index) => { node.style.flex='none'; node.style.width=index ? '430px' : '180px'; })); await settle();
+  assert.equal(await page.locator('html').getAttribute('data-dfl-size'),'wide');
+  assert.equal(await page.locator('[data-dfl-toggle]').isVisible(),false);
+  assert.deepEqual(await page.locator('.conv_root').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-dfl-conversation-size'))),['micro','compact']);
+  assert.deepEqual(await page.locator('.input_root').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-dfl-input-size'))),['micro','compact']);
+  for(const id of ['primary','embedded']) {
+    await page.getByRole('textbox',{name:`Draft ${id}`}).fill('保留的容器草稿');
+    await checkStats(id, false);
+    await page.locator(`[data-editor-id="${id}"] [data-dfl-stats-toggle]`).click(); await settle();
+    await checkStats(id, true);
+  }
+  const settledFrames = await page.evaluate(()=>window.rafRequests); await settle();
+  assert.ok(await page.evaluate(()=>window.rafRequests)<=settledFrames+1,'local container density settles without resize feedback');
+  await page.locator('.conv_root').first().evaluate(node=>node.style.width='430px'); await settle();
+  assert.equal(await page.locator('.conv_root').first().getAttribute('data-dfl-conversation-size'),'compact');
+  assert.equal(await page.getByRole('textbox',{name:'Draft primary'}).innerText(),'保留的容器草稿');
+  await clean();
+
+  await page.setViewportSize({ width: 1280, height: 900 }); await mount();
+  await page.locator('.conv_body').evaluate(body=>{
+    const shell=document.createElement('section'); shell.style.cssText='width:180px;height:180px;flex:none';
+    shell.innerHTML='<div class="conv_body" style="height:180px" data-conversation-content><div class="conv_scrollBody" data-conversation-scroll>Rootless embedded conversation</div></div>';
+    body.append(shell);
+  }); await settle();
+  assert.equal(await page.locator('.conv_root').getAttribute('data-dfl-conversation-size'),'regular','rootless embed does not classify its outer root');
+  assert.equal(await page.locator('.conv_body').last().getAttribute('data-dfl-conversation-size'),null);
+  assert.equal(await page.locator('.conv_body').last().getAttribute('data-dfl-content-size'),'micro');
+  assert.ok((await page.locator('.conv_body').last().boundingBox()).height<=180,'rootless embedded body keeps its allotted height');
+  await clean();
+
+  // A local short conversation must not borrow the outer desktop's height.
+  await page.setViewportSize({ width: 1440, height: 1000 }); await mount();
+  await page.locator('.conv_root').evaluate(root=>{root.style.flex='none';root.style.width='430px';root.style.height='180px';}); await settle();
+  assert.equal(await page.locator('.conv_root').getAttribute('data-dfl-short'),'true');
+  assert.equal(await page.locator('.conv_body').getAttribute('data-dfl-content-short'),'true');
+  assert.equal(await page.locator('.conv_body').evaluate(el=>el.style.getPropertyValue('--dfl-content-height')),'180px');
+  await page.getByRole('textbox',{name:'Draft primary'}).fill(draft); await settle();
+  assert.ok(await page.locator('.input_scroll').evaluate(el=>el.clientHeight<=72 && el.scrollHeight>el.clientHeight),'short local editor has its own scroll budget');
+  await clean();
+
   // Only an actually visible, interactive portal may suspend drawer keys.
+  await page.setViewportSize({ width: 390, height: 844 });
   await mount({ nativeClose: false });
   for (const state of ['display-none', 'visibility-hidden', 'inert']) {
     await page.evaluate(state => {
@@ -199,6 +341,8 @@ try {
   // Replacing a frame must synchronize even an identical glyph into the NEW control.
   await mount();
   for (const replacementIcon of [icon, icon.replace('M3 4h18v16H3zM9 4v16', 'M4 5h16v14H4zM10 5v14')]) {
+    await page.locator('[data-dfl-stats-toggle]').click(); await settle();
+    assert.equal(await page.locator('[data-dfl-stats-toggle]').getAttribute('aria-expanded'), 'true');
     await page.evaluate(markup => {
       const parsed = new DOMParser().parseFromString(markup, 'text/html');
       document.querySelector('.host_frame').replaceWith(document.importNode(parsed.querySelector('.host_frame'), true));
@@ -207,6 +351,8 @@ try {
     assert.equal(await page.locator('[data-dfl-toggle]').count(), 1, 'one fallback after frame replacement');
     assert.equal(await page.locator('[data-dfl-toggle] svg').evaluate(el => el.outerHTML), await page.locator('.host_sidebarCol svg').evaluate(el => el.outerHTML), 'replacement native glyph resynchronized');
     assert.equal(await page.locator('[data-dfl-toggle]').getAttribute('class'), 'sidebar_toggle', 'replacement native classes resynchronized');
+    assert.equal(await page.locator('[data-dfl-stats-toggle]').count(), 1, 'frame replacement does not duplicate disclosure');
+    assert.equal(await page.locator('[data-dfl-stats-toggle]').getAttribute('aria-expanded'), 'false', 'new composer starts collapsed rather than inheriting another draft state');
   }
   await clean();
 
@@ -221,6 +367,7 @@ try {
     document.querySelector('.host_frame').setAttribute('data-dfl-open', 'preexisting-open');
     document.querySelector('.host_frame').setAttribute('data-dfl', 'preexisting-frame');
     document.querySelector('.host_sidebarCol').id = 'host-sidebar-id';
+    document.querySelector('[data-composer-dock]').id = 'host-native-stats-id';
     document.querySelector('.host_rightbarCol').inert = true;
   });
   const snapshot = () => page.evaluate(() => [...document.querySelectorAll('*')].map(el => ({

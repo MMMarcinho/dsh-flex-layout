@@ -35,6 +35,10 @@ export function install(doc: Document, layout: Layout): () => void {
   const oldVars = vars.map(key => [key, html.style.getPropertyValue(key), html.style.getPropertyPriority(key)])
   const cleanups: (() => void)[] = []
   const measuredCanvas = new Set<HTMLElement>()
+  const measuredRegions = new Set<HTMLElement>()
+  const statDocks = new Map<HTMLElement, HTMLButtonElement>()
+  const statsExpanded = new WeakMap<HTMLElement, boolean>()
+  let statsId = 0
   const ownedStyles = new Map<HTMLElement, Set<string>>()
   function cssVar(node: HTMLElement, key: string, value: string) {
     let keys = ownedStyles.get(node)
@@ -81,6 +85,50 @@ export function install(doc: Document, layout: Layout): () => void {
   function role(node: HTMLElement | undefined, value: string) {
     if (node) attr(node, 'data-dfl', value)
   }
+  function syncStats() {
+    const docks = new Set(parts!.center.querySelectorAll<HTMLElement>('[data-composer-dock]'))
+    for (const [dock, toggle] of statDocks) {
+      if (!docks.has(dock) || !dock.querySelector('[data-composer-stat]')) {
+        toggle.remove(); statDocks.delete(dock)
+        dock.removeAttribute('data-dfl-stats-expanded')
+        dock.removeAttribute('data-dfl-stats-has-context')
+      }
+    }
+    for (const dock of docks) {
+      const stats = [...dock.querySelectorAll<HTMLElement>('[data-composer-stat]')]
+      if (!stats.length) continue
+      const owner = dock.closest<HTMLElement>('[data-dfl="input-root"]') ?? dock
+      for (const [index, stat] of stats.entries()) {
+        attr(stat, 'data-dfl-stat-kind', stat.getAttribute('data-composer-stat') || (index ? 'usage' : 'activity'))
+      }
+      // Preserve every native detail handler. Only the layout disclosure is ours.
+      const context = [...dock.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="dialog"]')]
+        .find(node => !node.closest('[data-composer-stat]'))?.parentElement
+      if (context) attr(context, 'data-dfl-stat-context', '')
+      let toggle = statDocks.get(dock)
+      if (!toggle) {
+        toggle = doc.createElement('button')
+        toggle.type = 'button'; toggle.dataset.dflStatsToggle = ''; toggle.dataset.dflOwned = ''
+        toggle.className = stats[0].querySelector('button')?.className ?? ''
+        toggle.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        if (!dock.id) attr(dock, 'id', `dfl-stats-${++statsId}`)
+        toggle.setAttribute('aria-controls', dock.id)
+        toggle.addEventListener('click', () => {
+          const currentOwner = dock.closest<HTMLElement>('[data-dfl="input-root"]') ?? dock
+          statsExpanded.set(currentOwner, !(statsExpanded.get(currentOwner) ?? false))
+          schedule()
+        })
+        dock.append(toggle); statDocks.set(dock, toggle)
+      }
+      if (toggle.parentElement !== dock) dock.append(toggle)
+      const expanded = statsExpanded.get(owner) ?? false
+      attr(dock, 'data-dfl-stats-expanded', String(expanded))
+      attr(dock, 'data-dfl-stats-has-context', String(!!context))
+      toggle.setAttribute('aria-expanded', String(expanded))
+      toggle.setAttribute('aria-label', expanded ? '收起详情 / Collapse details' : '展开详情 / Expand details')
+      toggle.title = expanded ? '收起详情' : '展开详情'
+    }
+  }
   function discover() {
     const next = findFrame(doc)
     if (parts?.frame !== next?.frame) {
@@ -118,7 +166,7 @@ export function install(doc: Document, layout: Layout): () => void {
     for (const scroll of findParts(parts.center, 'scrollBody')) {
       role(scroll, 'scroll')
       for (const node of modulePeers(scroll, 'scrollBody')) {
-        for (const part of ['root', 'body', 'composerSeat', 'composerStack', 'titleRow', 'tabs', 'header', 'headerLeading', 'headerCorner', 'headerUtilities', 'viewArea']) {
+        for (const part of ['root', 'body', 'composerSeat', 'composerStack', 'titleRow', 'tabs', 'header', 'headerLeading', 'headerCorner', 'headerUtilities', 'titleCluster', 'viewTabs', 'viewsMoreAnchor', 'viewArea']) {
           if (hasPart(node, part)) role(node, `conversation-${part}`)
         }
       }
@@ -134,6 +182,42 @@ export function install(doc: Document, layout: Layout): () => void {
       role(findPart(stat, 'pill'), 'stat-pill')
       role(findPart(stat, 'label'), 'stat-label')
     }
+    syncStats()
+    // Navigation follows the frame; content and controls follow their own
+    // available containers. A desktop canvas composer can still be only 430px.
+    const regions = new Set<HTMLElement>()
+    const visible = win.visualViewport
+    const availableHeight = visible && Math.abs(visible.scale - 1) < 0.02 ? visible.height : win.innerHeight
+    for (const body of parts.center.querySelectorAll<HTMLElement>('[data-dfl="conversation-body"]')) {
+      const root = body.parentElement?.matches('[data-dfl="conversation-root"]') ? body.parentElement : undefined
+      if (root) regions.add(root)
+      regions.add(body)
+      const bounds = body.getBoundingClientRect(), outer = (root ?? body).getBoundingClientRect()
+      const width = Math.min(bounds.width, outer.width)
+      const size = width < 320 ? 'micro' : width < 768 ? 'compact' : 'regular'
+      if (root) {
+        attr(root, 'data-dfl-conversation-size', size)
+        attr(root, 'data-dfl-short', String(outer.height < 300))
+      }
+      attr(body, 'data-dfl-content-size', size)
+      attr(body, 'data-dfl-content-short', String(outer.height < 300))
+      attr(body, 'data-dfl-canvas-layout', width >= 1100 && outer.height >= 600 ? 'native' : width >= 600 && width > outer.height ? 'split' : 'stack')
+      cssVar(body, '--dfl-content-width', `${Math.round(width)}px`)
+      cssVar(body, '--dfl-content-height', `${Math.round(Math.min(outer.height, availableHeight))}px`)
+    }
+    for (const root of parts.center.querySelectorAll<HTMLElement>('[data-dfl="input-root"]')) {
+      const seat = root.closest<HTMLElement>('[data-composer-seat], [data-dfl="conversation-composerSeat"]')
+      const body = root.closest<HTMLElement>('[data-dfl="conversation-body"]')
+      regions.add(root)
+      if (seat) regions.add(seat)
+      // Seat outer width is stable when compact padding changes. Measuring the
+      // padded child here would make the 600px breakpoint history-dependent.
+      const width = Math.min((seat ?? root).getBoundingClientRect().width, body?.getBoundingClientRect().width ?? Infinity)
+      attr(root, 'data-dfl-input-size', width < 280 ? 'micro' : width < 600 ? 'compact' : 'regular')
+      attr(root, 'data-dfl-stats-mode', (body?.getBoundingClientRect().width ?? width) < 320 ? 'scroll' : 'wrap')
+    }
+    for (const node of measuredRegions) if (!regions.has(node)) { resize.unobserve(node); measuredRegions.delete(node) }
+    for (const node of regions) if (!measuredRegions.has(node)) { resize.observe(node); measuredRegions.add(node) }
     nativeToggle = findPart(parts.sidebar, 'toggle')
     if (button) {
       const icon = nativeToggle && (findPart(nativeToggle, 'panelIcon') ?? nativeToggle.querySelector('svg'))
@@ -153,6 +237,11 @@ export function install(doc: Document, layout: Layout): () => void {
     for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"]:has([data-session-stats-details], [data-session-stats-usage])')) role(dialog, 'stats-dialog')
     // Only semantic dialogs, never arbitrary plugin panels.
     for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) role(dialog, 'dialog')
+    for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) {
+      for (const part of ['header', 'title', 'description', 'actions']) {
+        for (const node of findParts(dialog, part)) role(node, `dialog-${part}`)
+      }
+    }
   }
   function update() {
     raf = 0
@@ -239,6 +328,8 @@ export function install(doc: Document, layout: Layout): () => void {
     disposed = true; if (raf) win.cancelAnimationFrame(raf)
     observer.disconnect(); resize.disconnect(); cleanups.forEach(stop => stop())
     releaseInert(); button?.remove(); backdrop?.remove(); style.remove()
+    for (const toggle of statDocks.values()) toggle.remove()
+    statDocks.clear()
     restore.reverse().forEach(reset => reset())
     oldVars.forEach(([key, value, priority]) => value ? html.style.setProperty(key, value, priority) : html.style.removeProperty(key))
   }
