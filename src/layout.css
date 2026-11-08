@@ -1,50 +1,125 @@
-/* All overrides are gated by our own markers. Host theme tokens stay intact. */
+/* Match native DSH regions; all changes are owned, reversible and scoped. */
 html[data-dfl-active] [data-dfl="frame"] { min-width: 0; min-height: 0; }
 html[data-dfl-active] :is([data-dfl="center"], [data-dfl="conversation-root"], [data-dfl="conversation-body"], [data-dfl="conversation-composerStack"]) { min-width: 0; min-height: 0; }
 html[data-dfl-active] [data-dfl="scroll"] { min-width: 0; overscroll-behavior: contain; }
 html[data-dfl-active] [data-dfl="scroll"] :is(pre, table) { max-width: 100%; overflow-x: auto; }
 html[data-dfl-active] [data-dfl="scroll"] img { max-width: 100%; height: auto; }
-html[data-dfl-active] :is([data-dfl="input-root"], [data-dfl="input-card"]) { min-width: 0; max-width: 100%; box-sizing: border-box; }
-html[data-dfl-active] :is([data-dfl="input-row"], [data-dfl="input-standardControls"], [data-dfl="input-modes"], [data-dfl="input-tools"]) { min-width: 0; flex-wrap: wrap; gap: 6px; }
-html[data-dfl-active] [data-dfl="input-input"] { min-width: 0; overflow-wrap: anywhere; }
-html[data-dfl-active] [data-dfl="dialog"] { box-sizing: border-box; min-width: 0; max-width: calc(100vw - 24px); max-height: calc(var(--dfl-height, 100dvh) - 32px); overflow: auto; }
 [data-dfl-toggle], [data-dfl-backdrop] { display: none; }
 html[data-dfl-size="compact"] [data-dfl="frame"] {
   height: var(--dfl-height, 100dvh); max-height: var(--dfl-height, 100dvh);
   top: var(--dfl-top, 0px); box-sizing: border-box;
 }
-/* Legacy adapter: explicit columns work both before and after grid-column was
-   added upstream. New native drawers are intentionally left with their owner. */
+/* Native drawers remain host-owned. Legacy rails get an overlay, never a
+   squeezed conversation column. Preserve the native sidebar's own scrolling. */
 [data-dfl="frame"][data-dfl-size="compact"][data-dfl-legacy="true"] { grid-template-columns: 0 minmax(0, 1fr) 0 !important; }
 [data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="center"] { grid-column: 2; grid-row: 1; }
-[data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="rightbar"] { grid-column: 3; grid-row: 1; }
+[data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="rightbar"] { grid-column: 3; grid-row: 1; overflow: visible; }
 [data-dfl-size="compact"][data-dfl-legacy="true"] > [data-dfl="sidebar"] {
-  position: absolute; inset: 0 auto 0 0; width: min(320px, calc(100% - 56px));
-  max-width: calc(100% - 56px); z-index: 81;
+  position: absolute; inset: 0 auto 0 0; box-sizing: border-box;
+  padding-left: env(safe-area-inset-left); padding-bottom: env(safe-area-inset-bottom);
+  width: min(320px, calc(100% - 40px)); max-width: calc(100% - 40px); z-index: 81;
   background: var(--dsw-specific-sidebar-fill, #f5f5f5);
   visibility: hidden; transform: translateX(-100%); pointer-events: none;
 }
 [data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl="sidebar"] { visibility: visible; transform: none; pointer-events: auto; }
 [data-dfl-size="compact"][data-dfl-legacy="true"] > [data-side] { display: none; }
-/* The native sidebar's inner width may retain the collapsed 56px geometry. */
-[data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl="sidebar"] > * { width: 100% !important; max-width: 100%; }
+[data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl="sidebar"] > * { width: 100% !important; max-width: 100%; box-sizing: border-box; }
+/* Copy only the native panel glyph/classes, not its React-owned DOM node. */
 [data-dfl-toggle]:not([hidden]) {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 6px;
+  border: 0; border-radius: var(--dsw-radius-sm, 8px); cursor: pointer;
+  color: var(--dsw-alias-label-secondary, #666); background: transparent;
+}
+[data-dfl-toggle] svg { width: 18px; height: 18px; flex: none; }
+[data-dfl-toggle]:hover { background: var(--dsw-alias-interactive-hover, #8881); }
+[data-dfl-toggle]:focus-visible { outline: 2px solid var(--dsw-focus-ring-color, #4d6bfe); outline-offset: 1px; }
+[data-dfl-toggle][data-dfl-inline="false"]:not([hidden]) {
   position: absolute; left: max(8px, env(safe-area-inset-left));
   top: calc(var(--dsh-frame-top-clearance, 0px) + 8px); z-index: 82;
-  width: 44px; height: 44px; border: 1px solid var(--dsw-alias-border-l3, #ccc);
-  border-radius: 12px; color: var(--dsw-alias-label-primary, #222);
-  background: var(--dsw-alias-bg-base, white); cursor: pointer; font-size: 20px;
 }
-[data-dfl-backdrop]:not([hidden]) { display: block; position: absolute; inset: 0; z-index: 80; background: #0006; border: 0; width: 100%; height: 100%; }
-[data-dfl-size="compact"][data-dfl-open="true"] > [data-dfl-toggle] { left: auto; right: max(8px, env(safe-area-inset-right)); }
-html[data-dfl-size="compact"] [data-dfl-legacy="true"] [data-dfl="conversation-headerLeading"] { padding-left: 56px; }
-html[data-dfl-size="compact"] [data-dfl="conversation-titleRow"] { min-width: 0; flex-wrap: wrap; }
-html[data-dfl-size="compact"] [data-dfl="conversation-tabs"] { min-width: 0; overflow-x: auto; }
-html[data-dfl-size="compact"] [data-dfl="conversation-composerSeat"] { box-sizing: border-box; min-width: 0; padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
-html[data-dfl-size="compact"] [data-dfl="input-scroll"] { max-height: min(32dvh, 180px); overflow-y: auto; }
-html[data-dfl-size="compact"] [data-dfl="input-input"] { font-size: max(16px, 1em); }
-html[data-dfl-size="compact"] [data-dfl="dialog"] { width: calc(100vw - 24px) !important; }
+[data-dfl-backdrop]:not([hidden]) { display: block; position: absolute; inset: 0; z-index: 80; background: #0006; border: 0; padding: 0; width: 100%; height: 100%; }
+/* Only old hosts without their own close control need a floating close button. */
+[data-dfl-size="compact"][data-dfl-open="true"] [data-dfl-toggle]:not([hidden]) { position: absolute; left: auto; right: 4px; top: 8px; z-index: 82; }
+html[data-dfl-size="compact"] [data-dfl="conversation-header"] { padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
+html[data-dfl-size="compact"] [data-dfl="conversation-headerLeading"] { padding: 0; min-width: 0; }
+html[data-dfl-size="compact"] [data-dfl="conversation-headerCorner"] { margin-right: 0; }
+html[data-dfl-size="compact"] [data-dfl="conversation-headerUtilities"] { margin-left: 6px; }
+html[data-dfl-size="compact"] [data-dfl="conversation-titleRow"] { min-width: 0; }
+html[data-dfl-size="compact"] [data-dfl="conversation-tabs"] { min-width: 0; }
+/* Reuse the host's embedded-conversation width contract. Do not wrap its
+   measured model/effort controls: DSH already chooses their compact form. */
+html[data-dfl-size="compact"] [data-dfl="conversation-body"] {
+  --dsh-chat-content-width: min(calc(100% - 24px), 920px);
+  --dsh-composer-card-max-width: 100%;
+  --dsh-composer-side-clearance: 0px;
+}
+html[data-dfl-size="compact"] [data-dfl="conversation-composerSeat"] {
+  box-sizing: border-box; min-width: 0; flex-shrink: 0;
+  padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  --dsh-composer-text-max-height: min(180px, max(52px, calc((var(--dfl-height, 100dvh) - 260px) * .4)));
+}
+html[data-dfl-size="compact"] :is([data-dfl="input-root"], [data-dfl="input-card"], [data-dfl="input-grow"]) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+html[data-dfl-size="compact"] [data-dfl="input-root"] { padding-inline: 0; width: 100%; }
+html[data-dfl-size="compact"] [data-dfl="input-card"] { flex: none; gap: 8px; }
+html[data-dfl-size="compact"] [data-dfl="input-scroll"] { flex: 0 1 auto; min-height: 36px; max-height: var(--dsh-composer-text-max-height); overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 8px; }
+html[data-dfl-size="compact"] [data-dfl="input-input"] { min-width: 0; font-size: max(16px, 1em); padding: 4px 10px 8px 14px; overflow-wrap: anywhere; }
+html[data-dfl-size="compact"] [data-composer-placeholder] { font-size: 16px; white-space: normal; overflow-wrap: anywhere; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; }
+html[data-dfl-size="compact"] [data-dfl="input-grow"]:has([data-composer-placeholder]) [data-dfl="input-input"],
+html[data-dfl-size="compact"] [data-dfl="input-scroll"]:has([data-composer-placeholder]) { min-height: calc(60px + var(--dsh-content-font-delta, 0px) * 2); }
+/* Let the native row measure the full model/effort label and choose its icon
+   mode instead of first ellipsizing the text to 45cqw. */
+html[data-dfl-size="compact"] [data-slot="conversation.input.model"] button[aria-haspopup="menu"] { max-width: none; }
+html[data-dfl-size="compact"] [data-dfl="input-row"] { flex: none; min-width: 0; gap: 6px; }
+html[data-dfl-size="compact"] :is([data-dfl="input-tools"], [data-dfl="input-modes"], [data-dfl="input-trailing"], [data-dfl="input-standardControls"]) { min-width: 0; gap: 6px; }
+html[data-dfl-size="compact"] [data-composer-dock] { width: 100%; min-width: 0; flex-wrap: wrap; gap: 2px 6px; padding-top: 6px; }
+html[data-dfl-size="compact"] [data-composer-stat] { min-width: 0; max-width: 100%; }
+html[data-dfl-size="compact"] [data-dfl="stat-pill"] { white-space: normal; text-align: start; padding: 2px 4px; }
+html[data-dfl-size="compact"] [data-dfl="stat-label"] { overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+/* Keep the host's right panel/close actions usable instead of clipping a wide
+   panel inside a zero-width track. Native Dockkit keeps ownership of animation. */
+html[data-dfl-size="compact"] [data-sidebar-right-panel] { max-width: calc(100vw - 16px); max-height: var(--dfl-height, 100dvh); }
+html[data-dfl-size="compact"] [data-dfl="dialog"] { box-sizing: border-box; min-width: 0; width: min(100%, calc(100vw - 24px)) !important; max-width: calc(100vw - 24px); max-height: calc(var(--dfl-height, 100dvh) - 24px); overflow: auto; }
+html[data-dfl-size="compact"] [data-dfl="stats-dialog"] { box-sizing: border-box; max-width: calc(100vw - 24px); max-height: calc(var(--dfl-height, 100dvh) - 24px); overflow: auto; }
+/* dsh-canvas-workspace's public conversation View. Keep its native tabs,
+   composer, pan/zoom, cards and history; give each layer its own visible area.
+   The host measures the entire composer seat, including the stats dock. */
+html[data-dfl-size="compact"] [data-conversation-content]:has([data-canvas-conversation-view]) > [data-conversation-scroll] { position: relative; margin: 0; overflow: auto; }
+html[data-dfl-size="compact"] [data-conversation-content]:has([data-canvas-conversation-view]) > [data-conversation-scroll] > [data-composer-seat] {
+  position: relative; left: auto; right: auto; bottom: auto; width: 100%; max-height: none; z-index: 10;
+  --dsh-composer-side-clearance: 0px;
+  background: var(--dsw-alias-bg-base, white);
+}
+html[data-dfl-size="compact"] [data-conversation-content]:has([data-canvas-conversation-view]) [data-dfl="conversation-viewArea"] { flex: 1 0 180px; min-height: 180px; position: relative; }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] { inset: 0; min-height: 0; z-index: 11; }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-topbar { top: 8px; left: max(8px, env(safe-area-inset-left)); max-width: calc(100% - 16px); box-sizing: border-box; }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-stage { top: 0; bottom: calc(var(--dfl-canvas-dock-height, 0px) + 12px); }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-dock { right: 12px; bottom: 8px; width: calc(100% - 24px); max-height: calc(100% - 72px); }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-user-history-frame { max-height: clamp(40px, calc((var(--dfl-height, 100dvh) - 360px) * .4), 104px); }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-user-history-glass { background: var(--dsw-alias-bg-base, #fff); }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] :is(.chat-reply, .chat-reply-slot) { width: min(600px, calc(var(--dfl-canvas-width, 100vw) - 80px)); }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-menu { max-width: calc(100vw - 24px); max-height: max(80px, calc(var(--dfl-canvas-height, 100dvh) - 72px)); }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-menu.chat-sidebar { height: auto; }
 @media (pointer: coarse) {
-  html[data-dfl-size="compact"] :is([data-dfl="input-root"], [data-dfl="dialog"]) button { min-height: 44px; min-width: 44px; }
+  /* Spacing and 32px targets keep native 28/34px controls recognizable without
+     expanding every nested icon, pill, radio and menu item to a 44px square. */
+  html[data-dfl-size="compact"] [data-dfl="input-row"] button { min-height: 32px; }
 }
+
+/* Landscape phones have more useful horizontal than vertical room. Keep the
+   native composer beside the canvas instead of covering most of its height. */
+html[data-dfl-size="compact"][data-dfl-orientation="landscape"] [data-conversation-content]:has([data-canvas-conversation-view]) > [data-conversation-scroll] {
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 38vw, 340px); grid-template-rows: minmax(0, 1fr);
+}
+html[data-dfl-size="compact"][data-dfl-orientation="landscape"] [data-conversation-content]:has([data-canvas-conversation-view]) [data-dfl="conversation-viewArea"] { grid-column: 1; grid-row: 1; min-height: 0; }
+html[data-dfl-size="compact"][data-dfl-orientation="landscape"] [data-conversation-content]:has([data-canvas-conversation-view]) > [data-conversation-scroll] > [data-composer-seat] {
+  grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; justify-content: safe flex-end;
+  padding-top: 8px; padding-inline: 8px max(8px, env(safe-area-inset-right)); border-left: 1px solid var(--dsw-alias-border-l3, #eee);
+  --dsh-composer-text-max-height: max(52px, calc(var(--dfl-height, 100dvh) - 240px));
+}
+/* A short landscape menu must scroll as one surface. A fixed navigation block
+   plus a flex:1 list can otherwise leave the native workspace list at 0px. */
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-menu.chat-sidebar { overflow-y: auto; }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] .chat-sidebar > * { flex-shrink: 0; }
+html[data-dfl-size="compact"] [data-canvas-conversation-view] :is(.chat-sidebar-region, .chat-sidebar-list) { flex: none; min-height: 0; max-height: none; overflow: visible; }

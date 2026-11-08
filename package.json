@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node tests/browser.mjs",
     "test:host": "npm run build && node tests/host.mjs",
+    "test:mobile": "npm run build && node tests/mobile-host.mjs",
     "check": "npm run typecheck && npm test"
   },
   "devDependencies": { "esbuild": "^0.25.0", "typescript": "^5.9.0", "@playwright/test": "^1.56.0" }

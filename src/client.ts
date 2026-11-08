@@ -1,5 +1,5 @@
 import css from './layout.css'
-import { findFrame, findPart, hasPart, modulePeers, type FrameParts } from './adapter'
+import { findFrame, findPart, findParts, hasPart, modulePeers, type FrameParts } from './adapter'
 
 interface Layout { toggleSidebar(): void }
 interface Context { layout: Layout; effect(install: () => (() => void), label?: string): unknown }
@@ -34,8 +34,21 @@ export function install(doc: Document, layout: Layout): () => void {
   const vars = ['--dfl-height', '--dfl-top']
   const oldVars = vars.map(key => [key, html.style.getPropertyValue(key), html.style.getPropertyPriority(key)])
   const cleanups: (() => void)[] = []
+  const measuredCanvas = new Set<HTMLElement>()
+  const ownedStyles = new Map<HTMLElement, Set<string>>()
+  function cssVar(node: HTMLElement, key: string, value: string) {
+    let keys = ownedStyles.get(node)
+    if (!keys) ownedStyles.set(node, keys = new Set())
+    if (!keys.has(key)) {
+      const old = node.style.getPropertyValue(key), priority = node.style.getPropertyPriority(key)
+      restore.push(() => old ? node.style.setProperty(key, old, priority) : node.style.removeProperty(key))
+      keys.add(key)
+    }
+    if (node.style.getPropertyValue(key) !== value) node.style.setProperty(key, value)
+  }
   let parts: FrameParts | undefined, raf = 0, disposed = false
-  let legacy = false, drawerOpen = false, narrow = false
+  let legacy = false, drawerOpen = false, narrow = false, canvas = false
+  let nativeToggle: HTMLElement | undefined, toggleIcon = ''
   let button: HTMLButtonElement | undefined, backdrop: HTMLButtonElement | undefined
   let previousFocus: HTMLElement | null = null
   const inertBefore = new Map<HTMLElement, boolean>()
@@ -52,9 +65,11 @@ export function install(doc: Document, layout: Layout): () => void {
   }
   function ownControls() {
     button = doc.createElement('button')
-    button.type = 'button'; button.textContent = '☰'
+    button.type = 'button'
+    // Same panel icon as the host. No React tree or new component library.
+    button.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 4v16" stroke="currentColor" stroke-width="1.5"/></svg>'
     button.dataset.dflToggle = ''; button.dataset.dflOwned = ''
-    button.setAttribute('aria-label', '切换侧栏 / Toggle sidebar')
+    button.setAttribute('aria-label', '打开侧边栏 / Open sidebar')
     button.addEventListener('click', () => layout.toggleSidebar())
     backdrop = doc.createElement('button')
     backdrop.type = 'button'; backdrop.tabIndex = -1
@@ -71,7 +86,7 @@ export function install(doc: Document, layout: Layout): () => void {
     if (parts?.frame !== next?.frame) {
       if (parts) resize.unobserve(parts.frame)
       releaseInert(); button?.remove(); backdrop?.remove(); button = backdrop = undefined
-      parts = next; drawerOpen = false
+      parts = next; drawerOpen = false; toggleIcon = ''
       if (parts) resize.observe(parts.frame)
     }
     if (!parts) return
@@ -85,21 +100,57 @@ export function install(doc: Document, layout: Layout): () => void {
     attr(parts.frame, 'data-dfl-legacy', String(legacy))
     if (legacy && !button) ownControls()
     if (!legacy) { button?.remove(); backdrop?.remove(); button = backdrop = undefined }
-    const scroll = findPart(parts.center, 'scrollBody')
-    role(scroll, 'scroll')
-    if (scroll) {
+    canvas = [...parts.center.querySelectorAll<HTMLElement>('[data-canvas-conversation-view]')].some(node => node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden')
+    attr(parts.frame, 'data-dfl-canvas', String(canvas))
+    const roots = [...parts.center.querySelectorAll<HTMLElement>('[data-canvas-conversation-view]')]
+    const docks = roots.flatMap(root => [...root.querySelectorAll<HTMLElement>('.chat-dock')])
+    const measured = new Set([...roots, ...docks])
+    for (const node of measuredCanvas) if (!measured.has(node)) { resize.unobserve(node); measuredCanvas.delete(node) }
+    for (const node of measured) if (!measuredCanvas.has(node)) { resize.observe(node); measuredCanvas.add(node) }
+    for (const root of roots) {
+      const bounds = root.getBoundingClientRect()
+      const dock = root.querySelector<HTMLElement>('.chat-dock')
+      cssVar(root, '--dfl-canvas-dock-height', `${Math.ceil(dock?.getBoundingClientRect().height ?? 0)}px`)
+      cssVar(root, '--dfl-canvas-width', `${Math.round(bounds.width)}px`)
+      cssVar(root, '--dfl-canvas-height', `${Math.round(bounds.height)}px`)
+    }
+    // Multiple embedded conversations can be mounted at once (including canvas).
+    for (const scroll of findParts(parts.center, 'scrollBody')) {
+      role(scroll, 'scroll')
       for (const node of modulePeers(scroll, 'scrollBody')) {
-        for (const part of ['root', 'body', 'composerSeat', 'composerStack', 'titleRow', 'tabs', 'header', 'headerLeading']) {
+        for (const part of ['root', 'body', 'composerSeat', 'composerStack', 'titleRow', 'tabs', 'header', 'headerLeading', 'headerCorner', 'headerUtilities', 'viewArea']) {
           if (hasPart(node, part)) role(node, `conversation-${part}`)
         }
       }
     }
-    const controls = findPart(parts.center, 'standardControls')
-    if (controls) for (const node of modulePeers(controls, 'standardControls')) {
-      for (const part of ['root', 'row', 'card', 'modes', 'tools', 'standardControls', 'input', 'scroll']) {
-        if (hasPart(node, part)) role(node, `input-${part}`)
+    for (const controls of findParts(parts.center, 'standardControls')) {
+      for (const node of modulePeers(controls, 'standardControls')) {
+        for (const part of ['root', 'row', 'card', 'modes', 'tools', 'trailing', 'standardControls', 'input', 'scroll', 'grow', 'dock']) {
+          if (hasPart(node, part)) role(node, `input-${part}`)
+        }
       }
     }
+    for (const stat of parts.center.querySelectorAll<HTMLElement>('[data-composer-stat]')) {
+      role(findPart(stat, 'pill'), 'stat-pill')
+      role(findPart(stat, 'label'), 'stat-label')
+    }
+    nativeToggle = findPart(parts.sidebar, 'toggle')
+    if (button) {
+      const icon = nativeToggle && (findPart(nativeToggle, 'panelIcon') ?? nativeToggle.querySelector('svg'))
+      if (icon && icon.outerHTML !== toggleIcon) {
+        toggleIcon = icon.outerHTML
+        button.replaceChildren(icon.cloneNode(true))
+        button.className = nativeToggle!.className
+      }
+      const leading = findPart(parts.center, 'headerLeading')
+      const fallbackClose = !nativeToggle && !parts.frame.hasAttribute('data-sidebar-collapsed')
+      const parent = !fallbackClose && leading ? leading : parts.frame
+      if (button.parentElement !== parent) parent.prepend(button)
+      button.dataset.dflInline = String(parent === leading)
+      if (!parts.sidebar.id) attr(parts.sidebar, 'id', 'dfl-sidebar')
+      button.setAttribute('aria-controls', parts.sidebar.id)
+    }
+    for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"]:has([data-session-stats-details], [data-session-stats-usage])')) role(dialog, 'stats-dialog')
     // Only semantic dialogs, never arbitrary plugin panels.
     for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) role(dialog, 'dialog')
   }
@@ -109,8 +160,11 @@ export function install(doc: Document, layout: Layout): () => void {
     discover()
     if (!parts) return
     const width = parts.frame.getBoundingClientRect().width
-    narrow = width > 0 && width < 768
+    // Available space, not pointer type, decides the layout. Rotated phones
+    // and short narrow windows must not regain a desktop rail at 768px.
+    narrow = width > 0 && (width < 768 || (width < 1100 && win.innerHeight < 600))
     attr(html, 'data-dfl-active', '')
+    attr(html, 'data-dfl-orientation', narrow && width >= 600 && width > win.innerHeight ? 'landscape' : 'portrait')
     attr(html, 'data-dfl-size', narrow ? 'compact' : width < 1100 ? 'medium' : 'wide')
     attr(parts.frame, 'data-dfl-size', html.getAttribute('data-dfl-size')!)
     const viewport = win.visualViewport
@@ -120,18 +174,23 @@ export function install(doc: Document, layout: Layout): () => void {
     const top = follow ? (viewport?.offsetTop ?? 0) : 0
     html.style.setProperty('--dfl-height', `${Math.round(height)}px`)
     html.style.setProperty('--dfl-top', `${Math.round(top)}px`)
-    const open = narrow && legacy && !parts.frame.hasAttribute('data-sidebar-collapsed')
+    const open = narrow && legacy && !canvas && !parts.frame.hasAttribute('data-sidebar-collapsed')
     attr(parts.frame, 'data-dfl-open', String(open))
-    if (button) { button.hidden = !narrow; button.setAttribute('aria-expanded', String(open)) }
-    if (backdrop) backdrop.hidden = !open
-    if (narrow && legacy) {
+    if (button) {
+      const hidden = !narrow || canvas || (open && !!nativeToggle)
+      if (button.hidden !== hidden) button.hidden = hidden
+      button.setAttribute('aria-expanded', String(open))
+      button.setAttribute('aria-label', open ? '关闭侧边栏 / Close sidebar' : '打开侧边栏 / Open sidebar')
+    }
+    if (backdrop && backdrop.hidden !== !open) backdrop.hidden = !open
+    if (narrow && legacy && !canvas) {
       inert(parts.sidebar, !open); inert(parts.center, open); inert(parts.rightbar, open)
     } else releaseInert()
     if (open && !drawerOpen) {
       previousFocus = doc.activeElement instanceof HTMLElement ? doc.activeElement : null
       parts.sidebar.querySelector<HTMLElement>('button, a[href], input, [tabindex="0"]')?.focus({ preventScroll: true })
     } else if (!open && drawerOpen) {
-      if (narrow) (previousFocus?.isConnected && !previousFocus.inert ? previousFocus : button)?.focus({ preventScroll: true })
+      if (narrow) (previousFocus?.isConnected && !previousFocus.closest('[inert]') && previousFocus.getClientRects().length ? previousFocus : button)?.focus({ preventScroll: true })
       previousFocus = null
     }
     drawerOpen = open
@@ -140,30 +199,40 @@ export function install(doc: Document, layout: Layout): () => void {
   function onKey(event: KeyboardEvent) {
     if (!drawerOpen || !parts) return
     // Let a menu/dialog above the drawer consume Escape and its own focus trap.
-    if (doc.querySelector('[role="dialog"], [role="menu"]')) return
+    if ([...doc.querySelectorAll<HTMLElement>('[role="dialog"], [role="menu"]')].some(node =>
+      node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]'))) return
     if (event.key === 'Escape') { event.preventDefault(); close(); return }
     if (event.key !== 'Tab') return
     const nodes = [button!, ...parts.sidebar.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex="0"]')]
-      .filter(node => !node.hasAttribute('disabled') && node.getClientRects().length && !node.closest('[inert]'))
+      .filter(node => !node.hidden && !node.hasAttribute('disabled') && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[inert]'))
     if (nodes.length) {
       event.preventDefault()
       const current = nodes.indexOf(doc.activeElement as HTMLElement)
       nodes[(current + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length]?.focus()
     }
   }
+  function onSidebarClick(event: MouseEvent) {
+    if (!drawerOpen || !parts || !(event.target instanceof Element) || !parts.sidebar.contains(event.target)) return
+    // A session selection should expose its conversation, but menus/rename and
+    // workspace expansion keep the drawer open.
+    if (event.target.closest('[aria-haspopup], input, [role="menu"]')) return
+    if (event.target.closest('[data-row-key^="session:"]')) close()
+  }
   const observer = new MutationObserver(records => {
     // Text token streaming doesn't require a document scan.
-    if (records.some(record => record.type === 'attributes' || [...record.addedNodes, ...record.removedNodes]
-      .some(node => node instanceof HTMLElement && !node.hasAttribute('data-dfl-owned')))) schedule()
+    if (records.some(record => record.type === 'attributes'
+      ? !(record.target instanceof HTMLElement && record.target.hasAttribute('data-dfl-owned'))
+      : [...record.addedNodes, ...record.removedNodes].some(node => node instanceof HTMLElement && !node.hasAttribute('data-dfl-owned')))) schedule()
   })
   observer.observe(doc.body, { subtree: true, childList: true, attributes: true,
-    attributeFilter: ['data-sidebar-collapsed', 'data-sidebar-drawer'] })
+    attributeFilter: ['data-sidebar-collapsed', 'data-sidebar-drawer', 'hidden', 'aria-hidden'] })
   const resize = new ResizeObserver(schedule)
   resize.observe(doc.documentElement)
   const listen = (target: EventTarget, event: string, handler: EventListener) => {
     target.addEventListener(event, handler); cleanups.push(() => target.removeEventListener(event, handler))
   }
   listen(win, 'resize', schedule); listen(doc, 'keydown', onKey as EventListener)
+  listen(doc, 'click', onSidebarClick as EventListener)
   if (win.visualViewport) { listen(win.visualViewport, 'resize', schedule); listen(win.visualViewport, 'scroll', schedule) }
   update()
   return () => {
