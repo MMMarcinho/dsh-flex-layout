@@ -5,8 +5,11 @@
 export function hasPart(node: Element, part: string): boolean {
   return [...node.classList].some(token => token.endsWith(`_${part}`))
 }
+export function findParts(root: ParentNode, part: string): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(`[class*="_${part}"]`)].filter(node => hasPart(node, part))
+}
 export function findPart(root: ParentNode, part: string): HTMLElement | undefined {
-  return [...root.querySelectorAll<HTMLElement>(`[class*="_${part}"]`)].find(node => hasPart(node, part))
+  return findParts(root, part)[0]
 }
 export function modulePeers(anchor: HTMLElement, part: string): HTMLElement[] {
   const token = [...anchor.classList].find(value => value.endsWith(`_${part}`))
