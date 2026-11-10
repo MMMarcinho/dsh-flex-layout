@@ -47,6 +47,32 @@ html[data-dfl-size="compact"] [data-dfl="frame"] {
 :is(html[data-dfl-size="compact"], [data-dfl-conversation-size="compact"], [data-dfl-conversation-size="micro"]) [data-dfl="conversation-headerUtilities"] { margin-left: 6px; }
 :is(html[data-dfl-size="compact"], [data-dfl-conversation-size="compact"], [data-dfl-conversation-size="micro"]) [data-dfl="conversation-titleRow"] { min-width: 0; }
 :is(html[data-dfl-size="compact"], [data-dfl-conversation-size="compact"], [data-dfl-conversation-size="micro"]) [data-dfl="conversation-tabs"] { min-width: 0; }
+/* Short conversations reduce chrome before shrinking the content. At 600px
+   the existing title row and tabs fit side by side, in their DOM/focus order.
+   Nothing is moved, cloned or removed; the host still owns tab overflow.
+   Give its measured tabs a stable real track, not a self-shrinking auto width. */
+html[data-dfl-active] [data-dfl-header-density="short"] [data-dfl="conversation-header"] {
+  min-height: 0; padding-block: 4px 0;
+}
+html[data-dfl-active] [data-dfl-header-density="short"] [data-dfl="conversation-tabs"] { margin-top: 2px; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-header"] {
+  grid-template-columns: auto minmax(0, 1fr) clamp(288px, 46%, 408px); align-items: center; column-gap: 6px;
+  min-height: 42px; padding: 4px max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left));
+}
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-headerLeading"] { grid-area: 1 / 1; padding: 0; min-width: 0; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-titleRow"] { grid-area: 1 / 2; min-height: 32px; min-width: 0; padding-inline-start: 0; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-titleCluster"] { min-width: 0; gap: 6px; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-crumbs"] { flex: 1 1 auto; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-headerActions"] { min-width: 0; flex-shrink: 1; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-headerUtilities"] { gap: 4px; margin-left: 6px; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-headerCorner"] { margin-left: 4px; margin-right: 0; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-tabs"] {
+  grid-area: 1 / 3; width: auto; min-width: 0; margin: 0; padding: 0;
+  flex-wrap: nowrap; gap: 8px; align-items: center; justify-content: flex-end;
+}
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-viewTabs"] { flex-wrap: nowrap; gap: 8px; align-items: center; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-tab"] { min-height: 32px; padding: 8px 6px; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-dfl="conversation-viewsMore"] { width: 32px; height: 32px; margin-top: 0; }
 /* Keep a consistent inner gutter even when a collapsed desktop rail leaves
    a medium/wide conversation. Input density and edge spacing are independent. */
 html[data-dfl-active] [data-dfl="conversation-composerSeat"] { box-sizing: border-box; padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
@@ -127,6 +153,12 @@ html[data-dfl-active] [data-dfl-canvas-layout="split"]:has([data-canvas-conversa
 html[data-dfl-active] [data-dfl-canvas-layout]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-menu.chat-sidebar { overflow-y: auto; }
 html[data-dfl-active] [data-dfl-canvas-layout]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-sidebar > * { flex-shrink: 0; }
 html[data-dfl-active] [data-dfl-canvas-layout]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] :is(.chat-sidebar-region, .chat-sidebar-list) { flex: none; min-height: 0; max-height: none; overflow: visible; }
+
+/* Keep native accessible names/listeners while turning the floating canvas
+   tools into a shallow icon row. This is not whole-page scaling. */
+html[data-dfl-active] [data-dfl-header-density="single"] [data-canvas-conversation-view] .chat-topbar { top: 4px; gap: 2px; padding: 2px; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-canvas-conversation-view] :is(.chat-float-button, .chat-layout-action) { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; }
+html[data-dfl-active] [data-dfl-header-density="single"] [data-canvas-conversation-view] .chat-layout-action { font-size: 0; gap: 0; }
 
 /* Extremely small screens use the same native controls in a scrollable page,
    not a shrunken desktop. Secondary statistics scroll horizontally as full

@@ -51,6 +51,7 @@ const run = (args) =>
   });
 await run(["plugin", "--profile", "web", "add", `link:${process.cwd()}`]);
 const canvasRoot = resolve(process.env.DSH_CANVAS_ROOT || "../dsh-canvas-workspace");
+sourceHashes["canvas/dist/client.js"] = createHash("sha256").update(await readFile(resolve(canvasRoot,"dist/client.js"))).digest("hex");
 await run(["plugin", "--profile", "web", "add", `link:${canvasRoot}`]);
 // Synthetic durable history gives the native header real nonblank Session scope;
 // no real user history, credentials or model requests are used.
@@ -404,7 +405,7 @@ try {
   };
   async function runContainerRegression() {
     const audit = [], failures = [], onboardingDiagnostics = [];
-    const sections = (process.env.DSH_MOBILE_SECTIONS || 'containers,resize,tiny,blank').split(',');
+    const sections = (process.env.DSH_MOBILE_SECTIONS || 'header,touch,containers,resize,tiny,blank').split(',');
     const saveAudit = () => writeFile(resolve(root,'container-result.json'),JSON.stringify({sourceHashes,sections,checks:audit,failures,onboardingDiagnostics,blockedRequests,syntheticTurns:12,syntheticMenuSessions:18,modelRequestsSent:0},null,2));
     const persistentDraft = '容器断点草稿：中文 English 0123456789，未发送。';
     const record = (name, ok, detail) => {
@@ -521,6 +522,137 @@ try {
       ...[[768,600],[768,1024],[820,600],[820,1180],[900,768],[900,1200],[1024,768],[1024,1366],[430,180],[800,240],[1200,240]].map(([width,height]) => ({width,height,bars:false})),
       ...[[1100,800],[1280,900],[1440,1000]].map(([width,height]) => ({width,height,bars:true})),
     ];
+    if (sections.includes('header')) {
+      // Measure the real host DOM and exercise its own menus, not a re-created
+      // React tree or a fabricated view registration/width measurement.
+      const header = page.locator('[data-dfl="conversation-header"]');
+      const chooseView = async name => {
+        const tab = page.getByRole('tab', {name, exact: true});
+        if (await tab.isVisible()) { await tab.focus(); await page.keyboard.press('Enter'); }
+        else { const more = page.getByRole('button', {name:'更多会话视图',exact:true}); await more.focus(); await page.keyboard.press('Enter'); await page.getByRole('menuitem',{name,exact:true}).click(); }
+        await settle();
+      };
+      await editor.evaluate(el => { window.__headerEditor = el; window.__headerUtilityButtons = [...document.querySelectorAll('[data-dfl="conversation-headerUtilities"] button')]; });
+      // Optional comparison against a known earlier plugin stylesheet. Swap
+      // only our owned CSS, then restore it before every regression assertion.
+      if (process.env.DSH_HEADER_BASELINE_CSS) {
+        const baseline = await readFile(process.env.DSH_HEADER_BASELINE_CSS,'utf8');
+        const style = page.locator('style[data-dfl-owned]');
+        const current = await style.textContent();
+        for (const [width,height] of [[667,375],[1206,465]]) {
+          await page.setViewportSize({width,height}); await settle(); await closeDrawer();
+          await style.evaluate((el,css)=>{el.textContent=css},baseline); await settle();
+          const before = await header.boundingBox(); await snap(`header-before-${width}x${height}`);
+          await style.evaluate((el,css)=>{el.textContent=css},current); await settle();
+          const after = await header.boundingBox(); await snap(`header-after-${width}x${height}`);
+          audit.push({name:`header-comparison-${width}x${height}`,before,after});
+        }
+      }
+      const originalTitle = await page.locator('[data-dfl="conversation-crumb"]').last().textContent();
+      const longTitle = '横屏长会话标题 Native title with long words '.repeat(10);
+      for (const [width,height] of [[600,375],[667,375],[844,390],[932,430],[1206,465],[800,150],[800,180],[800,240],[599,375],[600,375],[601,375],[820,599],[820,600],[820,601],[820,599],[390,844],[844,390]]) {
+        await page.setViewportSize({width,height}); await settle(); await closeDrawer();
+        await page.locator('[data-dfl="conversation-root"]').evaluate(el=>{el.scrollTop=0});
+        await page.locator('[data-dfl="conversation-crumb"]').last().evaluate((el,title)=>{el.textContent=title},longTitle); await settle();
+        const read = () => header.evaluate(el => ({
+          box: el.getBoundingClientRect().toJSON(),
+          root: el.closest('[data-dfl="conversation-root"]').getBoundingClientRect().toJSON(),
+          density: el.closest('[data-dfl="conversation-root"]').dataset.dflHeaderDensity,
+          tabs: [...el.querySelectorAll('[role="tab"]')].map(tab=>({name:tab.textContent,selected:tab.getAttribute('aria-selected')})),
+          controls: [...el.querySelectorAll('button')].filter(button=>button.getClientRects().length && getComputedStyle(button).visibility!=='hidden').map(button=>({name:button.getAttribute('aria-label')||button.textContent,box:button.getBoundingClientRect().toJSON()})),
+          title: el.querySelector('[data-dfl="conversation-crumbs"]').getBoundingClientRect().toJSON(),
+        }));
+        const shots=[]; for(let index=0;index<4;index++){shots.push(await read());await page.waitForTimeout(80)}
+        const shot=shots[0],name=`header-${width}x${height}`;audit.push({name,...shot});
+        record(`${name}: stable header and native tab measurement`,shots.every(other=>JSON.stringify(other)===JSON.stringify(shot)),shots);
+        if(shot.root.width>=600&&height<600&&shot.root.width>height) {
+          record(`${name}: one compact header row`,shot.density==='single'&&shot.box.height<=44,shot);
+          record(`${name}: title remains visible`,shot.title.width>=16,shot);
+          record(`${name}: real tab track does not collapse to one entry`,shot.tabs.length>=2,shot.tabs);
+          if(width>=932)record(`${name}: three native views fit at wider widths`,shot.tabs.length===3,shot.tabs);
+          for(const control of shot.controls)record(`${name}: ${control.name} inside header`,rectInside(control.box,shot.box),control);
+        }
+        record(`${name}: same composer and utility handlers`,await editor.evaluate(el=>el===window.__headerEditor&&window.__headerUtilityButtons.every(button=>button.isConnected)),shot);
+        record(`${name}: draft preserved`,await editor.innerText()===persistentDraft,await editor.innerText());
+        record(`${name}: full title remains accessible`,await page.locator('[data-dfl="conversation-crumb"]').last().textContent()===longTitle,shot.title);
+        await snap(name);
+      }
+      await page.setViewportSize({width:667,height:375});await settle();
+      await page.locator('[data-dfl="conversation-crumb"]').last().evaluate((el,title)=>{el.textContent=title},originalTitle);
+      for(const name of ['轨迹','对话','画布','对话','画布'])await chooseView(name);
+      await snap('header-canvas-667x375');
+      const toolbar = page.locator('[data-canvas-conversation-view] .chat-topbar');
+      record('header: shallow canvas toolbar',(await toolbar.boundingBox()).height<=40,await toolbar.boundingBox());
+      for(const name of ['导航与工作区','自动排布画布内容','新建画布会话','账户与版本']) {
+        const control=page.getByRole('button',{name,exact:true});
+        await control.click({trial:true});const box=await control.boundingBox();
+        record(`header: ${name} keeps touch target`,box.width>=32&&box.height>=32,box);
+      }
+      await checkMenu('header-667x375',667,375);
+      await chooseView('对话');
+      const more=page.getByRole('button',{name:'更多操作',exact:true});await more.focus();await page.keyboard.press('Enter');await page.getByRole('menu').waitFor();await page.keyboard.press('Escape');await settle();
+      record('header: native utility menu restores focus',await more.evaluate(el=>el===document.activeElement),null);
+      await toggle.focus();await page.keyboard.press('Enter');await settle();
+      record('header: sidebar still isolates focus',await page.locator('[data-dfl="center"]').evaluate(el=>el.inert),null);
+      await page.keyboard.press('Escape');await settle();
+      record('header: sidebar restores trigger focus',await toggle.evaluate(el=>el===document.activeElement),null);
+      await page.getByRole('button',{name:'打开右侧边栏',exact:true}).click();await settle();within(await page.locator('[data-sidebar-right-panel]').boundingBox(),667,375,'compact header right panel');
+      await page.getByRole('button',{name:'收起右侧边栏',exact:true}).click();await settle();
+      await page.setViewportSize({width:1440,height:1000});await settle();
+      record('header: native desktop density restores',await page.locator('[data-dfl="conversation-root"]').getAttribute('data-dfl-header-density')==='native',await header.boundingBox());
+      await saveAudit();
+    }
+    if (sections.includes('touch')) {
+      await page.setViewportSize({width:1440,height:1000});await settle();await switchView('对话');await setNativeBars(false);await switchView('画布');
+      const client=await page.context().newCDPSession(page);
+      let activeTouches=false;
+      const touch=async(type,points)=>{await client.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([id,x,y])=>({id,x,y,radiusX:1,radiusY:1}))});activeTouches=type!=='touchCancel'&&!(type==='touchEnd'&&!points.length);await page.waitForTimeout(30)};
+      const camera=()=>page.locator('.chat-world').evaluate(el=>{const m=new DOMMatrix(getComputedStyle(el).transform);return {x:m.e,y:m.f,zoom:m.a}});
+      const near=(a,b,label)=>{for(const key of ['x','y','zoom'])assert.ok(Math.abs(a[key]-b[key])<0.15,`${label} ${key}: ${JSON.stringify({a,b})}`)};
+      for(const [width,height] of [[667,375],[390,844],[198,242]]) {
+        const name=`host-touch-${width}x${height}`;
+        await attempt(name,async()=>{
+          await page.setViewportSize({width,height});await settle();
+          await page.getByRole('button',{name:'自动排布画布内容',exact:true}).click();await settle();
+          await page.locator('.chat-stage').scrollIntoViewIfNeeded();await settle();
+          const point=await page.evaluate(()=>{
+            const stage=document.querySelector('.chat-stage'),bounds=stage.getBoundingClientRect();
+            const valid=(x,y)=>{const el=document.elementFromPoint(x,y);return el?.closest('.chat-stage')===stage&&!el.closest('button,a,input,textarea,[contenteditable],.chat-topbar,.chat-dock')};
+            for(const bodyOnly of [true,false])for(let y=Math.max(8,bounds.top+12);y<Math.min(innerHeight-24,bounds.bottom-24);y+=8)for(let x=Math.max(38,bounds.left+38);x<Math.min(innerWidth-38,bounds.right-38);x+=8){
+              if([x-25,x-15,x+15,x+25,x+35].every(x=>valid(x,y)&&valid(x,y+15))&&(!bodyOnly||document.elementFromPoint(x,y)?.closest('.chat-markdown')))
+                return {x,y,stage:bounds.toJSON(),surface:bodyOnly?'reply':'background'};
+            }
+            throw new Error('No visible noninteractive canvas surface for touch input');
+          });
+          const {x,y}=point,before=await camera(),browserScale=await page.evaluate(()=>window.visualViewport?.scale??1);
+          const start=before.zoom>1.2?25:15,end=before.zoom>1.2?15:25;
+          await touch('touchStart',[[1,x-start,y]]);
+          await touch('touchStart',[[1,x-start,y],[2,x+start,y]]);
+          near(await camera(),before,'adding second finger does not jump');
+          await touch('touchMove',[[1,x-end,y],[2,x+end,y]]);
+          const scaled=await camera(),expected=Math.min(2,Math.max(.25,before.zoom*end/start));
+          assert.ok(Math.abs(scaled.zoom-expected)<.01&&Math.abs(scaled.zoom-before.zoom)>.01,'real host touch changes canvas scale');
+          for(const [axis,offset] of [['x',point.stage.x],['y',point.stage.y]]) {
+            const midpoint=axis==='x'?x:y;
+            assert.ok(Math.abs((midpoint-offset-before[axis])/before.zoom-(midpoint-offset-scaled[axis])/scaled.zoom)<.25,`real host ${axis} pinch midpoint stays anchored`);
+          }
+          await touch('touchMove',[[1,x-end+5,y+8],[2,x+end+5,y+8]]);
+          const two=await camera();near(two,{...scaled,x:scaled.x+5,y:scaled.y+8},'two-finger pan');
+          await touch('touchEnd',[[1,x-end+5,y+8]]);near(await camera(),two,'2 to 1 keeps camera');
+          await touch('touchMove',[[2,x+end+10,y+13]]);near(await camera(),{...two,x:two.x+5,y:two.y+5},'remaining finger pans');
+          await touch('touchEnd',[]);
+          assert.equal(await page.locator('[data-canvas-dragging]').count(),0,'host gesture ends without stuck dragging');
+          assert.equal(await editor.innerText(),persistentDraft,'pinch does not touch native draft');
+          assert.equal(await page.evaluate(()=>window.visualViewport?.scale??1),browserScale,'canvas pinch does not also zoom the browser page');
+          await snap(name);audit.push({name,point,before,scaled,after:await camera(),draftPreserved:true,browserScale});
+          await page.getByRole('button',{name:'导航与工作区',exact:true}).tap();await page.getByRole('dialog',{name:'导航与工作区',exact:true}).waitFor();await page.keyboard.press('Escape');await settle();
+          assert.equal(await page.getByRole('dialog',{name:'导航与工作区',exact:true}).isVisible(),false,'native menu works after touch ends');
+        });
+        if(activeTouches)await touch('touchCancel',[]);await saveAudit();
+      }
+      await client.detach();
+      await page.setViewportSize({width:1440,height:1000});await settle();await switchView('对话');
+    }
     if (sections.includes('containers')) for (const view of ['对话', '画布']) {
       await page.setViewportSize({width: 1440,height: 1000}); await settle();
       for (const {width,height,bars} of cases) {
