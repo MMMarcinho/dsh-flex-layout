@@ -13,10 +13,8 @@ import { chromium } from "@playwright/test";
 const sourceHashes = Object.fromEntries(await Promise.all(["src/client.ts", "src/layout.css", "dist/client.js"].map(async path => [path, createHash("sha256").update(await readFile(path)).digest("hex")])));
 const root = resolve("work/mobile-regression");
 const cwd = resolve(root, "workdir");
-const executable =
-  "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness";
-const cli =
-  "/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js";
+const executable = process.env.DSH_TEST_NODE || "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness";
+const cli = process.env.DSH_TEST_CLI || "/Applications/DeepSeek Harness.app/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js";
 const env = {
   PATH: process.env.PATH,
   LANG: "zh_CN.UTF-8",
@@ -271,12 +269,11 @@ try {
     });
   });
   browser = await chromium.launch({
-    executablePath:
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    executablePath: process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     headless: true,
   });
   const page = await browser.newPage({
-    viewport: { width: 1440, height: 1000 }, hasTouch: true,
+    viewport: { width: 1440, height: 1000 }, hasTouch: true, locale: "zh-CN",
   });
   const errors = [];
   const blockedRequests = [];
@@ -405,7 +402,7 @@ try {
   };
   async function runContainerRegression() {
     const audit = [], failures = [], onboardingDiagnostics = [];
-    const sections = (process.env.DSH_MOBILE_SECTIONS || 'header,touch,containers,resize,tiny,blank').split(',');
+    const sections = (process.env.DSH_MOBILE_SECTIONS || 'landscape,header,touch,containers,resize,tiny,blank').split(',');
     const saveAudit = () => writeFile(resolve(root,'container-result.json'),JSON.stringify({sourceHashes,sections,checks:audit,failures,onboardingDiagnostics,blockedRequests,syntheticTurns:12,syntheticMenuSessions:18,modelRequestsSent:0},null,2));
     const persistentDraft = '容器断点草稿：中文 English 0123456789，未发送。';
     const record = (name, ok, detail) => {
@@ -522,6 +519,44 @@ try {
       ...[[768,600],[768,1024],[820,600],[820,1180],[900,768],[900,1200],[1024,768],[1024,1366],[430,180],[800,240],[1200,240]].map(([width,height]) => ({width,height,bars:false})),
       ...[[1100,800],[1280,900],[1440,1000]].map(([width,height]) => ({width,height,bars:true})),
     ];
+    if (sections.includes('landscape')) {
+      await switchView('画布');
+      for (const [width,height] of [[844,390],[667,375],[932,430],[1206,465],[600,320],[800,240],[390,844],[198,242],[844,390],[1440,900]]) {
+        await page.setViewportSize({width,height}); await settle();
+        // Native composer controls animate/reflow after a width breakpoint.
+        // Measure the final layout, not the intermediate transition frame.
+        await page.waitForTimeout(400);
+        await page.waitForFunction(() => {
+          if (document.querySelector('[data-dfl-canvas-layout]')?.getAttribute('data-dfl-canvas-layout') !== 'split') return true;
+          const rail = document.querySelector('.chat-dock')?.getBoundingClientRect();
+          const seat = document.querySelector('[data-composer-seat]')?.getBoundingClientRect();
+          return rail && seat && Math.abs(rail.bottom - seat.top) < 2;
+        }, null, {timeout: 3000});
+        const name = `landscape-rail-${width}x${height}`;
+        await attempt(name, async () => {
+          const shot = await snapshot();
+          if (shot.canvasLayout === 'split') {
+            assert.ok(Math.abs(shot.stage.right-shot.rail.left)<2, 'stage and conversation rail are adjacent');
+            assert.ok(Math.abs(shot.rail.left-shot.seat.left)<2, 'messages and composer share the right column');
+            assert.ok(Math.abs(shot.rail.bottom-shot.seat.top)<2, `messages end just above native composer: ${JSON.stringify(shot)}`);
+            assert.ok(shot.history.clientHeight>=40, 'history keeps a readable scroll area');
+            assert.ok(shot.seat.bottom<=height+1, 'composer stays in short viewport');
+            await page.locator('.chat-user-history').evaluate(el=>el.scrollTop=el.scrollHeight);
+            assert.ok(await page.locator('.chat-user-history').evaluate(el=>el.scrollTop)>0, 'history scrolls independently');
+            await editor.fill(persistentDraft);
+            await page.locator('[data-dfl="input-trailing"] button').last().click({trial:true});
+          }
+          audit.push({name,...shot}); await snap(name);
+        });
+      }
+      await page.setViewportSize({width:844,height:390}); await editor.fill('长草稿内容 '.repeat(100)); await settle();
+      const grown=await snapshot();
+      record('landscape growing composer updates history bounds',Math.abs(grown.rail.bottom-grown.seat.top)<2,grown);
+      await editor.fill(persistentDraft);
+      await switchView('对话');
+      assert.equal(await editor.innerText(),persistentDraft,'native draft survives exiting canvas');
+    }
+
     if (sections.includes('header')) {
       // Measure the real host DOM and exercise its own menus, not a re-created
       // React tree or a fabricated view registration/width measurement.

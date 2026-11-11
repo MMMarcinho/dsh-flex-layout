@@ -137,16 +137,30 @@ html[data-dfl-active] [data-dfl-canvas-layout]:not([data-dfl-canvas-layout="nati
   html[data-dfl-size="compact"] [data-dfl="input-row"] button { min-height: 32px; }
 }
 
-/* Landscape phones have more useful horizontal than vertical room. Keep the
-   native composer beside the canvas instead of covering most of its height. */
-html[data-dfl-active] [data-dfl-canvas-layout="split"]:has([data-canvas-conversation-view]) > [data-conversation-scroll] {
-  display: grid; grid-template-columns: minmax(0, 1fr) clamp(240px, 38%, 360px); grid-template-rows: minmax(0, 1fr);
+/* Landscape uses one right-hand conversation rail, not a composer on the
+   right and orphaned messages under the canvas. Keep React's native trees in
+   place: the view spans both columns, but only the stage owns the left area. */
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]):has([data-canvas-conversation-view]) > [data-conversation-scroll] {
+  --dfl-canvas-rail-width: clamp(240px, 38%, 360px);
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--dfl-canvas-rail-width); grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
 }
-html[data-dfl-active] [data-dfl-canvas-layout="split"]:has([data-canvas-conversation-view]) [data-dfl="conversation-viewArea"] { grid-column: 1; grid-row: 1; min-height: 0; }
-html[data-dfl-active] [data-dfl-canvas-layout="split"]:has([data-canvas-conversation-view]) > [data-conversation-scroll] > [data-composer-seat] {
-  grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; justify-content: safe flex-end;
-  padding-top: 8px; padding-inline: 8px max(8px, env(safe-area-inset-right)); border-left: 1px solid var(--dsw-alias-border-l3, #eee);
-  --dsh-composer-text-max-height: max(52px, calc(var(--dfl-content-height, var(--dfl-height, 100dvh)) - 240px));
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]):has([data-canvas-conversation-view]) [data-dfl="conversation-viewArea"] { grid-column: 1 / -1; grid-row: 1; min-height: 0; pointer-events: none; }
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .canvas-app { background: transparent; }
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-stage { right: var(--dfl-canvas-rail-width); bottom: 0; pointer-events: auto; }
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-topbar { max-width: calc(100% - var(--dfl-canvas-rail-width) - 16px); pointer-events: auto; }
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-dock {
+  right: 0; top: 0; bottom: var(--dfl-canvas-composer-height, 160px); width: var(--dfl-canvas-rail-width); max-height: none;
+  box-sizing: border-box; padding: 8px max(8px, env(safe-area-inset-right)) 4px 8px;
+  justify-content: flex-end; border-left: 1px solid var(--dsw-alias-border-l3, #eee);
+  background: var(--dsw-alias-bg-base, white);
+}
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-user-history-frame { width: 100%; max-height: 100%; }
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]) [data-canvas-conversation-view] .chat-user-history { padding-inline: 0; }
+html[data-dfl-active] [data-dfl-canvas-layout="split"]:not([data-dfl-canvas-layout="native"]):has([data-canvas-conversation-view]) > [data-conversation-scroll] > [data-composer-seat] {
+  grid-column: 2; grid-row: 1; align-self: end; min-height: 0; max-height: calc(100% - 64px); overflow-y: auto; justify-content: safe flex-end;
+  padding-top: 0; padding-inline: 8px max(8px, env(safe-area-inset-right)); border-left: 1px solid var(--dsw-alias-border-l3, #eee);
+  --dsh-composer-text-max-height: max(40px, calc(var(--dfl-content-height, var(--dfl-height, 100dvh)) - 280px));
 }
 /* A short landscape menu must scroll as one surface. A fixed navigation block
    plus a flex:1 list can otherwise leave the native workspace list at 0px. */
@@ -249,3 +263,7 @@ html[data-dfl-active] [data-composer-dock][data-dfl-stats-expanded="true"] [data
 html[data-dfl-active] [data-composer-dock][data-dfl-stats-expanded="true"] [data-dfl-stats-toggle] { grid-row: 1 / 3; }
 html[data-dfl-active] [data-composer-dock][data-dfl-stats-expanded="true"] [data-dfl="stat-pill"] { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 html[data-dfl-active] [data-composer-dock][data-dfl-stats-expanded="true"] [data-dfl="stat-label"] { flex: none; max-width: none; overflow: visible; white-space: nowrap; overflow-wrap: normal; }
+
+/* Short landscape already has two usable columns; the micro-screen stacked
+   fallback's 320px body minimum must not push the input below the viewport. */
+html[data-dfl-active] [data-dfl="conversation-root"][data-dfl-short="true"] > [data-dfl="conversation-body"][data-dfl-canvas-layout="split"]:has([data-canvas-conversation-view]) { flex: 1 1 0; min-height: 0; height: auto; }

@@ -73,3 +73,13 @@ npm run test:mobile
 ## 设计参考
 
 参考 [dsh-web-mobile](https://github.com/mexiaosqwq/dsh-web-mobile) 的窄屏布局、安全区与兼容性经验，以及 [dsh-mobile](https://github.com/saya-ch/dsh-mobile) 的可见视口和触屏布局思路。本项目独立实现，未复制这两个项目的代码，也不安装或依赖它们。
+
+### 横屏会话栏回归
+
+横屏画布把已发送的用户消息与 DSH 原生输入框统一放在右栏，左栏画布使用完整可用高度。消息区独立滚动，随输入框和详情区增高收缩；不移动原生 React 节点，不丢草稿。短横屏不再继承竖向极小屏的 320px 内容最小高度。
+
+`npm run check` 额外覆盖横屏双栏几何、输入命中、消息滚动、动态草稿高度、旋转恢复和尺寸观察稳定性。可设置 `DSH_CANVAS_CSS=/path/to/dsh-canvas-workspace/src/styles.css`，用实际插件样式替代内置最小布局合约。
+
+`DSH_MOBILE_AUDIT_ONLY=1 DSH_MOBILE_SECTIONS=landscape node tests/mobile-host.mjs` 在隔离真实宿主中验证 600×320、667×375、844×390、932×430、1206×465、800×240，以及竖屏、198×242 与桌面切换。Linux 可通过 `DSH_TEST_NODE`、`DSH_TEST_CLI`、`CHROME_PATH` 指定已安装的 Node、DSH CLI 与 Chromium；默认仍使用 macOS 安装位置。所有输入仅填入草稿，不发送。
+
+2026-11-11 在 Chromium 隔离环境完成上述横屏专项：DSH 0.2.1-rc.3 与 npm 最新 0.2.2-rc.1 均通过十种视口及草稿恢复检查，配合包含连续触控修复的 Canvas 构建。rc.1 的 Canvas 测试使用仅限该空白 profile、该插件版本与该 DSH 版本的兼容豁免；未修改插件的公开版本支持声明。未进行 iOS Safari 真机验收。
