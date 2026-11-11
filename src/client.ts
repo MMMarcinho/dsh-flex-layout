@@ -152,12 +152,18 @@ export function install(doc: Document, layout: Layout): () => void {
     attr(parts.frame, 'data-dfl-canvas', String(canvas))
     const roots = [...parts.center.querySelectorAll<HTMLElement>('[data-canvas-conversation-view]')]
     const docks = roots.flatMap(root => [...root.querySelectorAll<HTMLElement>('.chat-dock')])
-    const measured = new Set([...roots, ...docks])
+    const seats = roots.flatMap(root => {
+      const seat = root.closest('[data-conversation-content]')?.querySelector<HTMLElement>(':scope > [data-conversation-scroll] > [data-composer-seat]')
+      return seat ? [seat] : []
+    })
+    const measured = new Set([...roots, ...docks, ...seats])
     for (const node of measuredCanvas) if (!measured.has(node)) { resize.unobserve(node); measuredCanvas.delete(node) }
     for (const node of measured) if (!measuredCanvas.has(node)) { resize.observe(node); measuredCanvas.add(node) }
     for (const root of roots) {
       const bounds = root.getBoundingClientRect()
       const dock = root.querySelector<HTMLElement>('.chat-dock')
+      const seat = root.closest('[data-conversation-content]')?.querySelector<HTMLElement>(':scope > [data-conversation-scroll] > [data-composer-seat]')
+      cssVar(root, '--dfl-canvas-composer-height', `${Math.ceil(seat?.getBoundingClientRect().height ?? 0)}px`)
       cssVar(root, '--dfl-canvas-dock-height', `${Math.ceil(dock?.getBoundingClientRect().height ?? 0)}px`)
       cssVar(root, '--dfl-canvas-width', `${Math.round(bounds.width)}px`)
       cssVar(root, '--dfl-canvas-height', `${Math.round(bounds.height)}px`)
