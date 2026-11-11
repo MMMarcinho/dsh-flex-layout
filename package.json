@@ -19,7 +19,7 @@
     "prepack": "npm run build",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node tests/browser.mjs",
+    "test": "npm run build && node tests/browser.mjs && node tests/landscape-header.mjs",
     "test:host": "npm run build && node tests/host.mjs",
     "test:mobile": "npm run build && node tests/mobile-host.mjs",
     "check": "npm run typecheck && npm test"

@@ -166,7 +166,7 @@ export function install(doc: Document, layout: Layout): () => void {
     for (const scroll of findParts(parts.center, 'scrollBody')) {
       role(scroll, 'scroll')
       for (const node of modulePeers(scroll, 'scrollBody')) {
-        for (const part of ['root', 'body', 'composerSeat', 'composerStack', 'titleRow', 'tabs', 'header', 'headerLeading', 'headerCorner', 'headerUtilities', 'titleCluster', 'viewTabs', 'viewsMoreAnchor', 'viewArea']) {
+        for (const part of ['root', 'body', 'composerSeat', 'composerStack', 'titleRow', 'tabs', 'header', 'headerLeading', 'headerCorner', 'headerUtilities', 'headerActions', 'titleCluster', 'crumbs', 'crumbSeg', 'crumb', 'viewTabs', 'tab', 'tabLabel', 'viewsMore', 'viewsMoreAnchor', 'viewArea']) {
           if (hasPart(node, part)) role(node, `conversation-${part}`)
         }
       }
@@ -198,6 +198,13 @@ export function install(doc: Document, layout: Layout): () => void {
       if (root) {
         attr(root, 'data-dfl-conversation-size', size)
         attr(root, 'data-dfl-short', String(outer.height < 300))
+        // Use the stable conversation boundary, never the header's changed
+        // height. A keyboard or a short embedded pane also deserves room.
+        const height = Math.min(outer.height, availableHeight)
+        const header = findPart(root, 'header')
+        const single = width >= 600 && width > height && height < 600
+          && header && findPart(header, 'titleRow') && findPart(header, 'tabs')
+        attr(root, 'data-dfl-header-density', single ? 'single' : height < 600 && width >= 320 ? 'short' : 'native')
       }
       attr(body, 'data-dfl-content-size', size)
       attr(body, 'data-dfl-content-short', String(outer.height < 300))
@@ -264,6 +271,9 @@ export function install(doc: Document, layout: Layout): () => void {
     html.style.setProperty('--dfl-height', `${Math.round(height)}px`)
     html.style.setProperty('--dfl-top', `${Math.round(top)}px`)
     const open = narrow && legacy && !canvas && !parts.frame.hasAttribute('data-sidebar-collapsed')
+    // Capture the trigger before hiding it or making its center inert; both
+    // operations can move browser focus to body synchronously.
+    if (open && !drawerOpen) previousFocus = doc.activeElement instanceof HTMLElement ? doc.activeElement : null
     attr(parts.frame, 'data-dfl-open', String(open))
     if (button) {
       const hidden = !narrow || canvas || (open && !!nativeToggle)
@@ -276,7 +286,6 @@ export function install(doc: Document, layout: Layout): () => void {
       inert(parts.sidebar, !open); inert(parts.center, open); inert(parts.rightbar, open)
     } else releaseInert()
     if (open && !drawerOpen) {
-      previousFocus = doc.activeElement instanceof HTMLElement ? doc.activeElement : null
       parts.sidebar.querySelector<HTMLElement>('button, a[href], input, [tabindex="0"]')?.focus({ preventScroll: true })
     } else if (!open && drawerOpen) {
       if (narrow) (previousFocus?.isConnected && !previousFocus.closest('[inert]') && previousFocus.getClientRects().length ? previousFocus : button)?.focus({ preventScroll: true })
