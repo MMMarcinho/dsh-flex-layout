@@ -249,8 +249,8 @@ export function install(doc: Document, layout: Layout): () => void {
     }
     for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"]:has([data-session-stats-details], [data-session-stats-usage])')) role(dialog, 'stats-dialog')
     // Only semantic dialogs, never arbitrary plugin panels.
-    for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) role(dialog, 'dialog')
-    for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')) {
+    for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]:not([data-shortcut-modal="sidebar"])')) role(dialog, 'dialog')
+    for (const dialog of doc.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]:not([data-shortcut-modal="sidebar"])')) {
       for (const part of ['header', 'title', 'description', 'actions']) {
         for (const node of findParts(dialog, part)) role(node, `dialog-${part}`)
       }
@@ -276,6 +276,22 @@ export function install(doc: Document, layout: Layout): () => void {
     const top = follow ? (viewport?.offsetTop ?? 0) : 0
     html.style.setProperty('--dfl-height', `${Math.round(height)}px`)
     html.style.setProperty('--dfl-top', `${Math.round(top)}px`)
+    // A native drawer is modal UI, not zoomable document content. Keep it
+    // within the visual viewport without resetting browser zoom or moving
+    // the conversation beneath it. Safari can pan its visual viewport while
+    // the layout viewport (and host drawer coordinates) stay unchanged.
+    const frameBounds = parts.frame.getBoundingClientRect()
+    const visualLeft = viewport?.offsetLeft ?? 0
+    const visualTop = viewport?.offsetTop ?? 0
+    const drawerWidth = Math.min(viewport?.width ?? width, frameBounds.width)
+    const drawerHeight = Math.min(viewport?.height ?? height, frameBounds.height)
+    const nativeDrawer = parts.frame.hasAttribute('data-sidebar-drawer')
+    attr(parts.frame, 'data-dfl-visual-drawer', String(narrow && (nativeDrawer || (legacy && !canvas)) && !follow))
+    cssVar(parts.frame, '--dfl-drawer-left', `${Math.max(0, visualLeft - frameBounds.left)}px`)
+    cssVar(parts.frame, '--dfl-drawer-top', `${Math.max(0, visualTop - frameBounds.top)}px`)
+    cssVar(parts.frame, '--dfl-drawer-width', `${drawerWidth}px`)
+    cssVar(parts.frame, '--dfl-drawer-height', `${drawerHeight}px`)
+
     const open = narrow && legacy && !canvas && !parts.frame.hasAttribute('data-sidebar-collapsed')
     // Capture the trigger before hiding it or making its center inert; both
     // operations can move browser focus to body synchronously.

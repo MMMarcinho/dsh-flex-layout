@@ -202,7 +202,7 @@ html[data-dfl-active] [data-dfl-input-size="micro"] [data-dfl="input-scroll"]:ha
 /* Native portal menus keep their actions and keyboard handling. Constrain
    their surface, rather than truncating each menu item's label. */
 @media (max-width: 319px) {
-  html[data-dfl-active] :is([role="menu"], [role="dialog"]) { box-sizing: border-box; min-width: 0; max-width: calc(100vw - 12px); max-height: calc(var(--dfl-height, 100dvh) - 12px); overflow: auto; }
+  html[data-dfl-active] :is([role="menu"], [role="dialog"]:not([data-shortcut-modal="sidebar"])) { box-sizing: border-box; min-width: 0; max-width: calc(100vw - 12px); max-height: calc(var(--dfl-height, 100dvh) - 12px); overflow: auto; }
   html[data-dfl-active] [role="menuitem"] { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 }
 /* At watch-sized widths use the canvas toolbar's existing icon/aria labels.
@@ -267,3 +267,17 @@ html[data-dfl-active] [data-composer-dock][data-dfl-stats-expanded="true"] [data
 /* Short landscape already has two usable columns; the micro-screen stacked
    fallback's 320px body minimum must not push the input below the viewport. */
 html[data-dfl-active] [data-dfl="conversation-root"][data-dfl-short="true"] > [data-dfl="conversation-body"][data-dfl-canvas-layout="split"]:has([data-canvas-conversation-view]) { flex: 1 1 0; min-height: 0; height: auto; }
+
+/* Preserve browser pinch zoom, but keep the modal navigation and its close
+   control inside the visible area. Do not use transform: scale(), which
+   would cancel accessibility zoom. Native open/close animations still own
+   transform; only its containing rectangle follows the visual viewport. */
+html[data-dfl-active] [data-dfl-visual-drawer="true"] > [data-dfl="sidebar"] {
+  left: var(--dfl-drawer-left); top: var(--dfl-drawer-top); bottom: auto;
+  max-width: max(0px, calc(var(--dfl-drawer-width) - 32px));
+  height: var(--dfl-drawer-height);
+}
+html[data-dfl-active] [data-dfl-visual-drawer="true"] [data-shortcut-modal="sidebar"],
+html[data-dfl-active] [data-dfl-visual-drawer="true"] [data-dfl="sidebar"] > [data-slot="sidebar"] > * {
+  width: 100% !important; max-width: 100%; min-width: 0; box-sizing: border-box;
+}
