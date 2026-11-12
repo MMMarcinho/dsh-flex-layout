@@ -1,5 +1,5 @@
 /** Latest DSH + both plugins in a disposable profile. No user history/model calls.
- * DSH_TEST_NODE/DSH_TEST_CLI select the host, CHROMIUM_PATH the browser.
+ * DSH_TEST_NODE/DSH_TEST_CLI select the host, CHROME_PATH (or CHROMIUM_PATH) the browser.
  * CDP page scale tests real Chromium visualViewport geometry; offsetLeft/Top
  * injection below is explicitly a modeled Safari-pan contract, not Safari QA.
  */
@@ -9,7 +9,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { constants, zstdCompressSync } from "node:zlib";
-import { chromium } from "@playwright/test";
+import { launchBrowser } from './browser-launch.mjs';
 const root = resolve(".host-test/sidebar");
 const cwd = resolve(root, "workdir");
 const executable =
@@ -254,12 +254,7 @@ try {
       reject(new Error(`Host exited ${code}: ${redact(output)}`));
     });
   });
-  browser = await chromium.launch({
-    executablePath:
-      process.env.CHROMIUM_PATH ||
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    headless: true,
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 }, isMobile: true, hasTouch: true,
     locale: "zh-CN",

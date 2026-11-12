@@ -19,7 +19,7 @@
     "prepack": "npm run build",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node tests/browser.mjs && node tests/landscape-header.mjs && node tests/landscape-canvas.mjs",
+    "test": "npm run build && node tests/browser-launch.test.mjs && node tests/browser.mjs && node tests/landscape-header.mjs && node tests/landscape-canvas.mjs",
     "test:sidebar": "npm run build && node tests/sidebar-host.mjs",
     "test:host": "npm run build && node tests/host.mjs",
     "test:mobile": "npm run build && node tests/mobile-host.mjs",

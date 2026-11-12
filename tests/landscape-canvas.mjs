@@ -1,10 +1,10 @@
 /** Native conversation DOM contract + actual canvas CSS. No model calls. */
 import assert from 'node:assert/strict';
 import {readFile, mkdir} from 'node:fs/promises';
-import {chromium} from '@playwright/test';
+import { launchBrowser } from './browser-launch.mjs';
 const bundle=await readFile('dist/client.js','utf8');
 const canvasCss=process.env.DSH_CANVAS_CSS ? await readFile(process.env.DSH_CANVAS_CSS,'utf8') : await readFile('tests/fixtures/canvas-layout.css','utf8');
-const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/usr/bin/chromium',headless:true});
+const browser=await launchBrowser();
 const page=await browser.newPage({viewport:{width:844,height:390},hasTouch:true});
 const errors=[];page.on('pageerror',e=>errors.push(e.message));
 const settle=()=>page.waitForTimeout(200);
