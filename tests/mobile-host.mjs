@@ -9,7 +9,7 @@ import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { constants, zstdCompressSync } from "node:zlib";
-import { chromium } from "@playwright/test";
+import { launchBrowser } from './browser-launch.mjs';
 const sourceHashes = Object.fromEntries(await Promise.all(["src/client.ts", "src/layout.css", "dist/client.js"].map(async path => [path, createHash("sha256").update(await readFile(path)).digest("hex")])));
 const root = resolve("work/mobile-regression");
 const cwd = resolve(root, "workdir");
@@ -268,10 +268,7 @@ try {
       reject(new Error(`Host exited ${code}: ${redact(output)}`));
     });
   });
-  browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    headless: true,
-  });
+  browser = await launchBrowser();
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 }, hasTouch: true, locale: "zh-CN",
   });

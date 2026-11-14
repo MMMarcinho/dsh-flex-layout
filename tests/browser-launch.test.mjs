@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { browserExecutable } from './browser-launch.mjs';
+const pick = (opts, paths) => browserExecutable({ env: {}, bundled: '/bundled', exists: path => paths.includes(path), ...opts });
+assert.equal(pick({ platform: 'win32', env: { PROGRAMFILES: '/programs' } }, ['/programs/Google/Chrome/Application/chrome.exe']), '/programs/Google/Chrome/Application/chrome.exe');
+const mac = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+assert.equal(pick({ platform: 'darwin' }, [mac]), mac);
+assert.equal(pick({ platform: 'linux' }, ['/usr/bin/chromium']), '/usr/bin/chromium');
+assert.equal(pick({ platform: 'darwin' }, ['/bundled', mac]), '/bundled');
+assert.equal(pick({ env: { CHROME_PATH: '/custom', CHROMIUM_PATH: '/legacy' } }, ['/custom', '/legacy', '/bundled']), '/custom');
+assert.equal(pick({ env: { CHROMIUM_PATH: '/legacy' } }, ['/legacy']), '/legacy');
+assert.throws(() => pick({ env: { CHROME_PATH: '/missing' } }, ['/bundled']), /does not exist/);
+assert.throws(() => pick({ platform: 'darwin' }, ['/usr/bin/chromium']), /playwright install chromium/);
+assert.throws(() => pick({}, []), /playwright install chromium/);
+console.log('PASS: browser selection across platforms, overrides, bundled fallback and actionable errors');

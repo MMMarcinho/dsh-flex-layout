@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { chromium } from '@playwright/test';
+import { launchBrowser } from './browser-launch.mjs';
 
 const root = resolve('work/host');
 await mkdir(root, { recursive: true });
@@ -31,7 +31,7 @@ try {
     server.on('error', error => { clearTimeout(timer); fail(error); });
     server.on('exit', code => { clearTimeout(timer); fail(new Error(`Host exited ${code}: ${redact(output)}`)); });
   });
-  browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+  browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

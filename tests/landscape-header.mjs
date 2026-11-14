@@ -3,9 +3,9 @@
  */
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { chromium } from '@playwright/test';
+import { launchBrowser } from './browser-launch.mjs';
 const bundle = await readFile('dist/client.js', 'utf8');
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
+const browser = await launchBrowser();
 const page = await browser.newPage({viewport: {width: 1440, height: 900}, hasTouch: true});
 const errors = [], results = [];
 page.on('pageerror', error => errors.push(error.message));

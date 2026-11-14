@@ -66,7 +66,9 @@ npm run test:mobile
 
 `DSH_MOBILE_AUDIT_ONLY=1 DSH_MOBILE_SECTIONS=header node tests/mobile-host.mjs` 可在两插件已构建后只跑头栏集成专项；运行中不要重建任一插件，以免 HMR 干扰结果。可选 `DSH_HEADER_BASELINE_CSS` 指向已知旧版布局 CSS，测试会仅临时替换本插件样式并保存相同视口前后截图，之后恢复当前样式再断言。
 
-真实宿主测试默认使用 macOS 已安装的 DeepSeek Harness 和 Google Chrome。所有会话、长统计标签与模型文案均为合成测试数据，不读取日常会话或继承模型凭据，不发送模型请求，不修改日常 profile，也不刷新正在使用的会话。测试截图和结果保存在忽略跟踪的 `work/` 中。
+所有浏览器测试共用同一启动配置：优先 `CHROME_PATH`（兼容 `CHROMIUM_PATH`），然后 Playwright 下载的 Chromium，最后查找当前平台已安装的 Chrome/Chromium。缺少浏览器时执行 `npx playwright install chromium`，或设置 `CHROME_PATH`。macOS 可执行 `CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run check`。
+
+真实宿主测试默认使用 macOS 已安装的 DeepSeek Harness。所有会话、长统计标签与模型文案均为合成测试数据，不读取日常会话或继承模型凭据，不发送模型请求，不修改日常 profile，也不刷新正在使用的会话。测试截图和结果保存在忽略跟踪的 `work/` 中。
 
 验证中的 150–240px 指 CSS 视口，不是手表物理像素。Safari 自身的地址/标签/分享工具栏由浏览器控制，网页插件不能压缩或移除；这里收紧的是 DSH 页内头栏及画布浮栏。真机 watchOS/iOS/Android、手表浏览器是否能完整运行 DSH、真实触控/软键盘/表冠输入、系统安全区与第三方插件组合仍需实际设备验证；Chromium 触屏/视口模拟不等于真机验收。极小屏需滚动访问内容，不保证所有功能同时显示。
 
